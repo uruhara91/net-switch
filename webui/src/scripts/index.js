@@ -94,6 +94,8 @@ function applyTranslations() {
     // sync lang select value if present
     const langSelect = document.getElementById('ns-lang-select');
     if (langSelect) langSelect.value = getLang();
+    // update import/export texts too
+    updateImportExportTexts();
 }
 
 createLangSelector();
@@ -189,6 +191,24 @@ function sortChecked() {
 
 const isolateList = [];
 
+// Helper: set status text and classes for a node
+function setNodeStatus(node, checked) {
+    const statusElement = node.querySelector('.app-status');
+    const switchLabel = node.querySelector('.switch-label');
+    if (!statusElement || !switchLabel) return;
+    if (checked) {
+        statusElement.textContent = t('isolated');
+        statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
+        switchLabel.textContent = t('isolated');
+        switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
+    } else {
+        statusElement.textContent = t('connected');
+        statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
+        switchLabel.textContent = t('connected');
+        switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
+    }
+}
+
 function populateApp(name, checked) {
     const node = document.importNode(template, true);
     const nameElement = node.querySelector('p');
@@ -215,7 +235,7 @@ function populateApp(name, checked) {
         }
     }
     
-    updateStatus();
+        setNodeStatus(node, checkbox.checked);
     
     if (checked) isolateList.push(name);
 
@@ -242,7 +262,7 @@ function populateApp(name, checked) {
             await run(`ip6tables -D OUTPUT -m owner --uid-owner ${appUid} -j REJECT`);
         }
 
-        updateStatus();
+            setNodeStatus(node, checkbox.checked);
         await saveIsolateList();
         hideLoading();
 
@@ -288,36 +308,35 @@ function hideLoading() {
 }
 
 function showSuccess(message) {
-    const toast = document.getElementById('success-toast');
-    const messageEl = document.getElementById('success-message');
-    if (toast && messageEl) {
-        messageEl.textContent = message;
-        // center the message text and center the toast container
+    showToast('success-toast', 'success-message', message, { center: true });
+}
+
+function showError(message) {
+    showToast('error-toast', 'error-message', message, { center: false });
+}
+
+// Generic toast helper
+function showToast(toastId, messageId, message, opts = { center: false }) {
+    const toast = document.getElementById(toastId);
+    const messageEl = document.getElementById(messageId);
+    if (!toast || !messageEl) return;
+
+    messageEl.textContent = message;
+    if (opts.center) {
         messageEl.style.textAlign = 'center';
         toast.style.display = 'flex';
         toast.style.justifyContent = 'center';
         toast.style.alignItems = 'center';
-        toast.classList.remove('translate-x-full', 'toast-hidden');
-        setTimeout(() => {
-            toast.classList.add('translate-x-full', 'toast-hidden');
-            // restore inline styles
+    }
+    toast.classList.remove('translate-x-full', 'toast-hidden');
+    setTimeout(() => {
+        toast.classList.add('translate-x-full', 'toast-hidden');
+        if (opts.center) {
             messageEl.style.textAlign = '';
             toast.style.justifyContent = '';
             toast.style.alignItems = '';
-        }, 2500);
-    }
-}
-
-function showError(message) {
-    const toast = document.getElementById('error-toast');
-    const messageEl = document.getElementById('error-message');
-    if (toast && messageEl) {
-        messageEl.textContent = message;
-        toast.classList.remove('translate-x-full', 'toast-hidden');
-        setTimeout(() => {
-            toast.classList.add('translate-x-full', 'toast-hidden');
-        }, 2500);
-    }
+        }
+    }, 2500);
 }
 
 function updateProfileSelect() {
@@ -347,7 +366,7 @@ function createImportExportControls() {
     if (importTitle) importTitle.textContent = `${t('import_export_title') || 'Import / Export Profiles'}`;
 
     if (exportBtn) {
-        exportBtn.textContent = `${ICONS.save} ${t('export_profiles') || 'Export Profiles'}`;
+        exportBtn.textContent = `${ICONS.save || '💾'} ${t('export_profiles') || 'Export Profiles'}`;
         exportBtn.addEventListener('click', () => {
             const blob = new Blob([JSON.stringify(profiles, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -358,11 +377,12 @@ function createImportExportControls() {
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
+            showSuccess(t('export_success') || 'Profiles exported successfully');
         });
     }
 
     if (importBtn && importInput) {
-        importBtn.textContent = `${ICONS.import} ${t('import_profiles') || 'Import Profiles'}`;
+    importBtn.textContent = `${ICONS.import || '📁'} ${t('import_profiles') || 'Import Profiles'}`;
         importBtn.addEventListener('click', () => importInput.click());
 
         importInput.addEventListener('change', async (e) => {
@@ -374,9 +394,9 @@ function createImportExportControls() {
                 Object.keys(imported).forEach(k => { profiles[k] = imported[k]; });
                 await saveProfiles();
                 updateProfileSelect();
-                showSuccess(t('profiles_imported') || 'Profiles imported');
+                showSuccess(t('import_success') || 'Profiles imported successfully');
             } catch (err) {
-                showError(t('profiles_import_error') || 'Invalid profiles file');
+                showError(t('import_error') || 'Invalid profiles file');
             }
         });
     }
@@ -402,6 +422,21 @@ function createImportExportControls() {
         }
     } catch (e) {
         // ignore styling errors
+    }
+}
+
+// Update only the textual labels of the import/export panel (no event reattachment)
+function updateImportExportTexts() {
+    try {
+        const exportBtn = document.getElementById('export-profiles-btn');
+        const importBtn = document.getElementById('import-profiles-btn');
+        const importTitle = document.getElementById('ns-import-title');
+
+        if (importTitle) importTitle.textContent = t('import_export_title') || 'Import / Export Profiles';
+        if (exportBtn) exportBtn.textContent = `${ICONS.save || '💾'} ${t('export_profiles') || 'Export Profiles'}`;
+        if (importBtn) importBtn.textContent = `${ICONS.import || '📁'} ${t('import_profiles') || 'Import Profiles'}`;
+    } catch (e) {
+        // ignore
     }
 }
 
