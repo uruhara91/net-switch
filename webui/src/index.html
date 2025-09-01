@@ -1,30 +1,38 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link href="styles/index.css" type="text/css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
-    <script type="module" src="scripts/index.js" type="text/javascript"></script>
-    <script type="module" src="scripts/mmrl.js" type="text/javascript"></script>
-  </head>
 
-  <body class="root_layout min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 text-gray-800 dark:from-gray-900 dark:to-gray-800 dark:text-gray-200">
-    <!-- Header -->
-    <div class="border-b border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
-      <div class="px-4 py-3">
-        <div class="flex items-center space-x-2">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
-            <i class="fas fa-network-wired text-sm text-white"></i>
-          </div>
-          <div>
-            <h1 id="ns-title" class="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-lg font-bold text-transparent">Net Switch</h1>
-            <p id="ns-subtitle" class="text-xs text-gray-500 dark:text-gray-400">Gestione Isolamento App</p>
-          </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link href="styles/index.css" type="text/css" rel="stylesheet" />
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+  <script type="module" src="scripts/index.js" type="text/javascript"></script>
+  <script type="module" src="scripts/mmrl.js" type="text/javascript"></script>
+</head>
+
+<body
+  class="root_layout min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 text-gray-800 dark:from-gray-900 dark:to-gray-800 dark:text-gray-200">
+  <!-- Header -->
+  <div class="border-b border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+    <div class="px-4 py-3">
+      <div class="flex items-center space-x-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600">
+          <i class="fas fa-network-wired text-sm text-white"></i>
+        </div>
+        <div>
+          <h1 id="ns-title"
+            class="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-lg font-bold text-transparent">
+            Net Switch
+          </h1>
+          <p id="ns-subtitle" class="text-xs text-gray-500 dark:text-gray-400">
+            Gestione Isolamento App
+          </p>
         </div>
       </div>
     </div>
-
+  </div>
+  <!-- Home page wrapper (so we can hide it when showing the dedicated IO page) -->
+  <div id="home-page">
     <!-- Import / Export Profiles Section -->
     <div class="mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
       <div class="p-4">
@@ -32,13 +40,21 @@
           <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-cyan-600">
             <i class="fas fa-file-export text-xs text-white"></i>
           </div>
-          <h2 id="ns-import-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Import / Export Profiles</h2>
+          <h2 id="ns-import-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+            Import / Export Profiles
+          </h2>
         </div>
 
         <div class="flex items-center gap-3">
-          <button id="export-profiles-btn" class="rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-2 text-sm text-white shadow-md hover:from-green-600 hover:to-emerald-700">Export Profiles</button>
-          <button id="import-profiles-btn" class="rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 px-3 py-2 text-sm text-white shadow-md hover:from-yellow-600 hover:to-orange-600">Import Profiles</button>
-          <input type="file" id="import-profiles-input" accept="application/json" class="hidden" />
+          <button id="open-io-page" aria-label="Advanced features"
+            class="rounded-full px-4 py-2 text-sm font-semibold text-white shadow-lg transform hover:-translate-y-0.5 transition-all duration-150"
+            style="
+                                background: linear-gradient(
+                                    90deg,
+                                    #06b6d4,
+                                    #6366f1
+                                );
+                            "></button>
         </div>
       </div>
     </div>
@@ -47,10 +63,13 @@
     <div class="mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
       <div class="p-4">
         <div class="mb-4 flex items-center space-x-2">
-          <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-green-500 to-emerald-600">
+          <div
+            class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-green-500 to-emerald-600">
             <i class="fas fa-user-cog text-xs text-white"></i>
           </div>
-          <h2 id="ns-profiles-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Gestione Profili</h2>
+          <h2 id="ns-profiles-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+            Gestione Profili
+          </h2>
         </div>
 
         <div class="space-y-3">
@@ -59,25 +78,36 @@
             <div class="flex items-center space-x-2">
               <div class="relative flex-grow">
                 <i class="fas fa-users absolute top-1/2 left-2 -translate-y-1/2 transform text-xs text-gray-400"></i>
-                <select id="profile-select" class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-7 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
-                  <option value="" id="ns-select-profile">Seleziona Profilo</option>
+                <select id="profile-select"
+                  class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-7 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
+                  <option value="" id="ns-select-profile">
+                    Seleziona Profilo
+                  </option>
                 </select>
               </div>
 
-              <button id="delete-profile" title="Elimina il profilo selezionato dal menu a tendina, oppure il profilo attualmente attivo" class="rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-3 py-2 text-sm whitespace-nowrap text-white shadow-md transition-all duration-200 hover:from-red-600 hover:to-red-700 focus:ring-1 focus:ring-red-500 focus:outline-none">
+              <button id="delete-profile"
+                title="Elimina il profilo selezionato dal menu a tendina, oppure il profilo attualmente attivo"
+                class="rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-3 py-2 text-sm whitespace-nowrap text-white shadow-md transition-all duration-200 hover:from-red-600 hover:to-red-700 focus:ring-1 focus:ring-red-500 focus:outline-none">
                 <i class="fas fa-trash"></i>
               </button>
             </div>
           </div>
 
           <!-- New Profile Creation -->
-          <div class="rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-3 dark:border-gray-600 dark:from-gray-700 dark:to-gray-600">
+          <div
+            class="rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50 p-3 dark:border-gray-600 dark:from-gray-700 dark:to-gray-600">
             <div class="flex space-x-2">
               <div class="relative flex-1">
-                <i class="fas fa-plus-circle absolute top-1/2 left-2 -translate-y-1/2 transform text-xs text-gray-400"></i>
-                <input type="text" id="new-profile-name" placeholder="Nome nuovo profilo" class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-7 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-purple-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" />
+                <i
+                  class="fas fa-plus-circle absolute top-1/2 left-2 -translate-y-1/2 transform text-xs text-gray-400"></i>
+                <input type="text" id="new-profile-name" placeholder="Nome nuovo profilo"
+                  class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-7 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-purple-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" />
               </div>
-              <button id="create-profile" class="rounded-lg bg-gradient-to-r from-purple-500 to-pink-600 px-3 py-2 text-sm whitespace-nowrap text-white shadow-md transition-all duration-200 hover:from-purple-600 hover:to-pink-700 focus:ring-1 focus:ring-purple-500 focus:outline-none"><i class="fas fa-magic mr-1 text-xs"></i><span id="ns-create">Crea</span></button>
+              <button id="create-profile"
+                class="rounded-lg bg-gradient-to-r from-purple-500 to-pink-600 px-3 py-2 text-sm whitespace-nowrap text-white shadow-md transition-all duration-200 hover:from-purple-600 hover:to-pink-700 focus:ring-1 focus:ring-purple-500 focus:outline-none">
+                <i class="fas fa-magic mr-1 text-xs"></i><span id="ns-create">Crea</span>
+              </button>
             </div>
           </div>
         </div>
@@ -87,16 +117,20 @@
     <!-- Search Section -->
     <div class="mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
       <div class="p-4">
-          <div class="mb-3 flex items-center space-x-2">
-          <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-yellow-500 to-orange-600">
+        <div class="mb-3 flex items-center space-x-2">
+          <div
+            class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-yellow-500 to-orange-600">
             <i class="fas fa-search text-xs text-white"></i>
           </div>
-          <h2 id="ns-search-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Cerca App</h2>
+          <h2 id="ns-search-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+            Cerca App
+          </h2>
         </div>
 
         <div class="relative">
           <i class="fas fa-search absolute top-1/2 left-3 -translate-y-1/2 transform text-xs text-gray-400"></i>
-          <input type="search" id="search" placeholder="Cerca app per nome..." class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-8 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-yellow-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200" />
+          <input type="search" id="search" placeholder="Cerca app per nome..."
+            class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-8 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-yellow-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200" />
         </div>
       </div>
     </div>
@@ -105,11 +139,14 @@
     <div class="mx-3 mt-4 mb-6">
       <div class="rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
         <div class="p-4">
-            <div class="mb-4 flex items-center space-x-2">
-            <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-purple-600">
+          <div class="mb-4 flex items-center space-x-2">
+            <div
+              class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-purple-600">
               <i class="fas fa-mobile-alt text-xs text-white"></i>
             </div>
-            <h2 id="ns-apps-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Lista Applicazioni</h2>
+            <h2 id="ns-apps-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+              Lista Applicazioni
+            </h2>
           </div>
           <div id="apps-list" class="space-y-2"></div>
         </div>
@@ -118,12 +155,14 @@
 
     <!-- App Template -->
     <template id="app-template">
-      <div class="group rounded-lg border border-gray-200 bg-gradient-to-r from-white to-gray-50 p-3 shadow-sm transition-all duration-200 hover:shadow-md dark:border-gray-600 dark:from-gray-700 dark:to-gray-800">
+      <div
+        class="group rounded-lg border border-gray-200 bg-gradient-to-r from-white to-gray-50 p-3 shadow-sm transition-all duration-200 hover:shadow-md dark:border-gray-600 dark:from-gray-700 dark:to-gray-800">
         <div class="flex items-center justify-between">
           <!-- App info -->
           <div class="flex min-w-0 flex-1 items-center space-x-3">
             <!-- App icon -->
-            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 shadow-md">
+            <div
+              class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 shadow-md">
               <i class="fas fa-mobile-alt text-xs text-white"></i>
             </div>
 
@@ -139,7 +178,9 @@
           <!-- Compact Switch -->
           <div class="flex flex-shrink-0 items-center space-x-2">
             <div class="hidden text-right sm:block">
-              <div class="switch-label text-xs text-gray-500 dark:text-gray-400">Connesso</div>
+              <div class="switch-label text-xs text-gray-500 dark:text-gray-400">
+                Connesso
+              </div>
             </div>
 
             <label class="switch-enhanced">
@@ -156,25 +197,84 @@
       <div class="rounded-xl bg-white p-6 shadow-2xl dark:bg-gray-800">
         <div class="flex items-center space-x-3">
           <div class="h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600"></div>
-          <div class="text-base font-medium text-gray-800 dark:text-gray-200">Caricamento...</div>
+          <div class="text-base font-medium text-gray-800 dark:text-gray-200">
+            Caricamento...
+          </div>
         </div>
       </div>
     </div>
+  </div>
+  <!-- end #home-page -->
 
-    <!-- Success Toast -->
-    <div id="success-toast" class="toast-hidden fixed top-4 right-4 z-50 translate-x-full transform rounded-lg bg-green-500 px-4 py-2 text-white shadow-lg transition-transform duration-300">
-      <div class="flex items-center space-x-2">
-        <i class="fas fa-check-circle text-sm"></i>
-        <span id="success-message" class="text-sm">Operazione completata!</span>
+  <!-- Dedicated Import/Export Page (hidden by default) -->
+  <div id="io-page"
+    class="hidden mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+    <div class="p-4">
+      <div class="mb-4 flex items-center space-x-2">
+        <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-blue-600">
+          <i class="fas fa-exchange-alt text-xs text-white"></i>
+        </div>
+        <h2 id="ns-io-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+          Import / Export
+        </h2>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label for="io-mode-select" id="io-mode-label"
+            class="block text-sm text-gray-600 dark:text-gray-300">Modalità</label>
+          <select id="io-mode-select"
+            class="mt-1 w-full rounded-lg border border-gray-300 py-2 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
+            <option id="io-option-export" value="export">
+              Export
+            </option>
+            <option id="io-option-import" value="import">
+              Import
+            </option>
+          </select>
+        </div>
+
+        <div>
+          <label for="io-path-input" id="io-path-label"
+            class="block text-sm text-gray-600 dark:text-gray-300">Percorso</label>
+          <input id="io-path-input" type="text" placeholder="/sdcard/Download/profiles.json"
+            class="mt-1 w-full rounded-lg border border-gray-300 py-2 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" />
+          <p id="io-desc" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+            Inserisci il percorso di destinazione per l'export o
+            il percorso sorgente per l'import.
+          </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button id="io-action-btn"
+            class="rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-2 text-sm text-white shadow-md">
+            Esegui
+          </button>
+          <button id="io-back-btn" class="rounded-lg bg-gray-200 px-3 py-2 text-sm text-gray-800 shadow-sm">
+            Indietro
+          </button>
+        </div>
       </div>
     </div>
+  </div>
 
-    <!-- Error Toast -->
-    <div id="error-toast" class="toast-hidden fixed top-4 right-4 z-50 translate-x-full transform rounded-lg bg-red-500 px-4 py-2 text-white shadow-lg transition-transform duration-300">
-      <div class="flex items-center space-x-2">
-        <i class="fas fa-exclamation-circle text-sm"></i>
-        <span id="error-message" class="text-sm">Errore nell'operazione!</span>
-      </div>
+  <!-- Success Toast - Always visible -->
+  <div id="success-toast"
+    class="toast-hidden fixed top-4 right-4 z-50 translate-x-full transform rounded-lg bg-green-500 px-4 py-2 text-white shadow-lg transition-transform duration-300">
+    <div class="flex items-center space-x-2">
+      <i class="fas fa-check-circle text-sm"></i>
+      <span id="success-message" class="text-sm">Operazione completata!</span>
     </div>
-  </body>
+  </div>
+
+  <!-- Error Toast - Always visible -->
+  <div id="error-toast"
+    class="toast-hidden fixed top-4 right-4 z-50 translate-x-full transform rounded-lg bg-red-500 px-4 py-2 text-white shadow-lg transition-transform duration-300">
+    <div class="flex items-center space-x-2">
+      <i class="fas fa-exclamation-circle text-sm"></i>
+      <span id="error-message" class="text-sm">Errore nell'operazione!</span>
+    </div>
+  </div>
+</body>
+
 </html>
