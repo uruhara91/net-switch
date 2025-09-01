@@ -18,8 +18,8 @@
             <i class="fas fa-network-wired text-sm text-white"></i>
           </div>
           <div>
-            <h1 class="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-lg font-bold text-transparent">Net Switch</h1>
-            <p class="text-xs text-gray-500 dark:text-gray-400">Gestione Isolamento App</p>
+            <h1 id="ns-title" class="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-lg font-bold text-transparent">Net Switch</h1>
+            <p id="ns-subtitle" class="text-xs text-gray-500 dark:text-gray-400">Gestione Isolamento App</p>
           </div>
         </div>
       </div>
@@ -32,7 +32,7 @@
           <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-green-500 to-emerald-600">
             <i class="fas fa-user-cog text-xs text-white"></i>
           </div>
-          <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">Gestione Profili</h2>
+          <h2 id="ns-profiles-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Gestione Profili</h2>
         </div>
 
         <div class="space-y-3">
@@ -42,7 +42,7 @@
               <div class="relative flex-grow">
                 <i class="fas fa-users absolute top-1/2 left-2 -translate-y-1/2 transform text-xs text-gray-400"></i>
                 <select id="profile-select" class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-7 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
-                  <option value="">Seleziona Profilo</option>
+                  <option value="" id="ns-select-profile">Seleziona Profilo</option>
                 </select>
               </div>
 
@@ -59,7 +59,7 @@
                 <i class="fas fa-plus-circle absolute top-1/2 left-2 -translate-y-1/2 transform text-xs text-gray-400"></i>
                 <input type="text" id="new-profile-name" placeholder="Nome nuovo profilo" class="w-full rounded-lg border border-gray-300 py-2 pr-3 pl-7 text-sm transition-all duration-200 focus:border-transparent focus:ring-1 focus:ring-purple-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" />
               </div>
-              <button id="create-profile" class="rounded-lg bg-gradient-to-r from-purple-500 to-pink-600 px-3 py-2 text-sm whitespace-nowrap text-white shadow-md transition-all duration-200 hover:from-purple-600 hover:to-pink-700 focus:ring-1 focus:ring-purple-500 focus:outline-none"><i class="fas fa-magic mr-1 text-xs"></i>Crea</button>
+              <button id="create-profile" class="rounded-lg bg-gradient-to-r from-purple-500 to-pink-600 px-3 py-2 text-sm whitespace-nowrap text-white shadow-md transition-all duration-200 hover:from-purple-600 hover:to-pink-700 focus:ring-1 focus:ring-purple-500 focus:outline-none"><i class="fas fa-magic mr-1 text-xs"></i><span id="ns-create">Crea</span></button>
             </div>
           </div>
         </div>
@@ -69,11 +69,11 @@
     <!-- Search Section -->
     <div class="mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
       <div class="p-4">
-        <div class="mb-3 flex items-center space-x-2">
+          <div class="mb-3 flex items-center space-x-2">
           <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-yellow-500 to-orange-600">
             <i class="fas fa-search text-xs text-white"></i>
           </div>
-          <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">Cerca App</h2>
+          <h2 id="ns-search-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Cerca App</h2>
         </div>
 
         <div class="relative">
@@ -87,11 +87,11 @@
     <div class="mx-3 mt-4 mb-6">
       <div class="rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
         <div class="p-4">
-          <div class="mb-4 flex items-center space-x-2">
+            <div class="mb-4 flex items-center space-x-2">
             <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-indigo-500 to-purple-600">
               <i class="fas fa-mobile-alt text-xs text-white"></i>
             </div>
-            <h2 class="text-lg font-semibold text-gray-800 dark:text-gray-200">Lista Applicazioni</h2>
+            <h2 id="ns-apps-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Lista Applicazioni</h2>
           </div>
           <div id="apps-list" class="space-y-2"></div>
         </div>
@@ -124,19 +124,9 @@
               <div class="switch-label text-xs text-gray-500 dark:text-gray-400">Connesso</div>
             </div>
 
-            <label class="relative inline-flex cursor-pointer items-center">
-              <input type="checkbox" class="peer sr-only" />
-              <!-- Animated switch design -->
-              <div class="peer relative h-6 w-10 overflow-hidden rounded-full bg-gray-200 shadow-sm transition-all duration-500 peer-checked:bg-gradient-to-r peer-checked:from-red-500 peer-checked:to-red-600 peer-focus:ring-2 peer-focus:ring-red-300 dark:bg-gray-600 dark:peer-focus:ring-red-800">
-                <!-- Background animation -->
-                <div class="absolute inset-0 -translate-x-full transform bg-gradient-to-r from-transparent via-white to-transparent opacity-20 transition-transform duration-1000 peer-checked:translate-x-full peer-checked:duration-700"></div>
-
-                <!-- Switch handle with smooth animation -->
-                <div class="absolute top-1 left-1 h-4 w-4 transform rounded-full border border-gray-300 bg-white shadow-md transition-all duration-500 ease-out peer-checked:translate-x-4 peer-checked:scale-110 peer-checked:border-white peer-checked:shadow-lg peer-active:scale-95">
-                  <!-- Pulse effect on change -->
-                  <div class="absolute inset-0 animate-ping rounded-full bg-white opacity-0 peer-checked:animate-pulse peer-checked:opacity-75"></div>
-                </div>
-              </div>
+            <label class="switch-enhanced">
+              <input type="checkbox" class="ns-toggle" />
+              <span class="slider" aria-hidden="true"></span>
             </label>
           </div>
         </div>
