@@ -1,14 +1,106 @@
 import { exec, toast } from 'kernelsu';
+import { t, setLang, getLang, onLangChange, availableLangs, ICONS, getLangDisplay } from './i18n.js';
 
 const template = document.getElementById('app-template').content;
 const appsList = document.getElementById('apps-list');
 
 const configPath = "/data/adb/.config/net-switch/isolated.json";
 const profilesPath = "/data/adb/.config/net-switch/profiles.json";
+// Single default config file (stores language, last profile, etc.)
+const defaultConfigPath = "/data/adb/.config/net-switch/default.json";
 
 let profiles = {};
 let currentProfile = '';
 let installedPackages = new Set();
+
+// Language selector + runtime translations
+function createLangSelector() {
+    // Place the selector absolutely inside the header bar so it's pinned to the right edge
+    // Find the header bar element (the top container with border and bg classes)
+    const headerBar = document.querySelector('.border-b') || document.querySelector('.px-4.py-3');
+    if (!headerBar) return;
+
+    // ensure headerBar is positioned relative so absolute children are positioned against it
+    const prevPosition = headerBar.style.position;
+    if (!prevPosition || prevPosition === '') headerBar.style.position = 'relative';
+
+    const container = document.createElement('div');
+    // absolute position near the right edge, vertically centered
+    container.className = 'absolute right-4 top-1/2 transform -translate-y-1/2 flex items-center';
+
+    const select = document.createElement('select');
+    select.id = 'ns-lang-select';
+    select.title = 'Language';
+    select.setAttribute('aria-label', 'Select language');
+    // small, compact selector to sit near the edge
+    select.className = 'rounded-md border border-gray-200 bg-white px-2 py-1 text-sm dark:bg-gray-800 dark:border-gray-700';
+    availableLangs.forEach(lang => {
+        const opt = document.createElement('option');
+        opt.value = lang;
+        opt.textContent = getLangDisplay(lang);
+        select.appendChild(opt);
+    });
+    select.value = getLang();
+    select.addEventListener('change', (e) => setLang(e.target.value));
+    container.appendChild(select);
+    headerBar.appendChild(container);
+}
+
+function applyTranslations() {
+    const elTitle = document.getElementById('ns-title');
+    const elSubtitle = document.getElementById('ns-subtitle');
+    const elProfilesTitle = document.getElementById('ns-profiles-title');
+    const elSelectProfile = document.getElementById('ns-select-profile');
+    const elCreate = document.getElementById('ns-create');
+    const elSearchTitle = document.getElementById('ns-search-title');
+    const elAppsTitle = document.getElementById('ns-apps-title');
+
+    if (elTitle) elTitle.textContent = t('title');
+    if (elSubtitle) elSubtitle.textContent = t('subtitle');
+    if (elProfilesTitle) elProfilesTitle.textContent = t('profiles_title');
+    if (elSelectProfile) elSelectProfile.textContent = `${t('select_profile_placeholder')}`;
+    if (elCreate) elCreate.textContent = t('create');
+    if (elSearchTitle) elSearchTitle.textContent = t('search_title');
+    if (elAppsTitle) elAppsTitle.textContent = t('apps_list_title');
+
+    const spinnerText = document.querySelector('#loading-spinner .text-base');
+    if (spinnerText) spinnerText.textContent = t('loading');
+
+    // update profile select placeholder if it exists
+    const profileSelect = document.getElementById('profile-select');
+    if (profileSelect) profileSelect.innerHTML = `<option value="">${t('select_profile_placeholder')}</option>`;
+
+    // Refresh app list items so their status labels reflect newly selected language
+    if (appsList) {
+        [...appsList.children].forEach(node => {
+            const checkbox = node.querySelector('.ns-toggle');
+            const statusElement = node.querySelector('.app-status');
+            const switchLabel = node.querySelector('.switch-label');
+            if (!checkbox || !statusElement || !switchLabel) return;
+            if (checkbox.checked) {
+                statusElement.textContent = `${t('isolated')}`;
+                statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
+                switchLabel.textContent = `${t('isolated')}`;
+                switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
+            } else {
+                statusElement.textContent = `${t('connected')}`;
+                statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
+                switchLabel.textContent = `${t('connected')}`;
+                switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
+            }
+        });
+    }
+
+    // sync lang select value if present
+    const langSelect = document.getElementById('ns-lang-select');
+    if (langSelect) langSelect.value = getLang();
+    // update import/export texts too
+    updateImportExportTexts();
+}
+
+createLangSelector();
+applyTranslations();
+onLangChange(() => applyTranslations());
 
 async function run(cmd) {
     const { errno, stdout, stderr } = await exec(cmd);
@@ -19,20 +111,110 @@ async function run(cmd) {
     return stdout;
 }
 
+// Load persisted language from filesystem (if available) and apply it.
+async function loadPersistedLang() {
+    try {
+        const out = await run(`cat ${defaultConfigPath} 2>/dev/null || true`);
+        if (out) {
+            try {
+                const cfg = JSON.parse(out.toString());
+                if (cfg.lang && availableLangs.includes(cfg.lang)) setLang(cfg.lang);
+            } catch (e) {
+                // if file is plain text (legacy) try to treat as single lang value
+                const fileLang = out.toString().trim();
+                if (availableLangs.includes(fileLang)) setLang(fileLang);
+            }
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Default config read/write helpers (store json with { lang, currentProfile })
+async function readDefaultConfig() {
+    try {
+        const out = await run(`cat ${defaultConfigPath} 2>/dev/null || true`);
+        if (!out) return {};
+        try {
+            return JSON.parse(out.toString());
+        } catch (e) {
+            // legacy plain text: assume it's just the lang
+            return { lang: out.toString().trim() };
+        }
+    } catch (e) {
+        return {};
+    }
+}
+
+async function writeDefaultConfig(cfg) {
+    try {
+        await run(`echo '${JSON.stringify(cfg)}' > ${defaultConfigPath}`);
+    } catch (e) {
+        // ignore write errors
+    }
+}
+
+async function persistDefaultKey(key, value) {
+    try {
+        const cfg = await readDefaultConfig();
+        cfg[key] = value;
+        await writeDefaultConfig(cfg);
+    } catch (e) {
+        // ignore
+    }
+}
+
+async function loadPersistedProfile() {
+    try {
+        const cfg = await readDefaultConfig();
+        if (cfg.currentProfile && profiles[cfg.currentProfile]) {
+            await loadProfile(cfg.currentProfile);
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Persist language changes to the default config so selection survives restarts
+onLangChange(async (lang) => {
+    await persistDefaultKey('lang', lang);
+});
+
+// attempt to load persisted language (and any legacy value)
+loadPersistedLang();
+
 function sortChecked() {
     [...appsList.children]
-        .sort((a, b) => (a.querySelector('input[type="checkbox"]').checked ? -1 : 1))
+        .sort((a, b) => (a.querySelector('.ns-toggle').checked ? -1 : 1))
         .forEach((node) => appsList.appendChild(node));
 }
 
 const isolateList = [];
+
+// Helper: set status text and classes for a node
+function setNodeStatus(node, checked) {
+    const statusElement = node.querySelector('.app-status');
+    const switchLabel = node.querySelector('.switch-label');
+    if (!statusElement || !switchLabel) return;
+    if (checked) {
+        statusElement.textContent = t('isolated');
+        statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
+        switchLabel.textContent = t('isolated');
+        switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
+    } else {
+        statusElement.textContent = t('connected');
+        statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
+        switchLabel.textContent = t('connected');
+        switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
+    }
+}
 
 function populateApp(name, checked) {
     const node = document.importNode(template, true);
     const nameElement = node.querySelector('p');
     nameElement.textContent = name;
 
-    const checkbox = node.querySelector('input[type="checkbox"]');
+    const checkbox = node.querySelector('.ns-toggle');
     checkbox.checked = checked;
 
     // Update app status indicator
@@ -41,19 +223,19 @@ function populateApp(name, checked) {
     
     function updateStatus() {
         if (checkbox.checked) {
-            statusElement.textContent = '🚫 Isolato';
+            statusElement.textContent = t('isolated');
             statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
-            switchLabel.textContent = 'Isolato';
+            switchLabel.textContent = t('isolated');
             switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
         } else {
-            statusElement.textContent = '📡 Connesso';
+            statusElement.textContent = t('connected');
             statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
-            switchLabel.textContent = 'Connesso';
+            switchLabel.textContent = t('connected');
             switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
         }
     }
     
-    updateStatus();
+        setNodeStatus(node, checkbox.checked);
     
     if (checked) isolateList.push(name);
 
@@ -63,7 +245,7 @@ function populateApp(name, checked) {
         const { stdout: appUid } = await exec(`grep "^${name}" /data/system/packages.list | awk '{print $2; exit}'`);
 
         if (!appUid || isNaN(appUid)) {
-            showError(`Impossibile ottenere UID di ${name}`);
+            showError(t('cannot_get_uid', { app: name }));
             hideLoading();
             await saveIsolateList();
             return;
@@ -80,15 +262,16 @@ function populateApp(name, checked) {
             await run(`ip6tables -D OUTPUT -m owner --uid-owner ${appUid} -j REJECT`);
         }
 
-        updateStatus();
+            setNodeStatus(node, checkbox.checked);
         await saveIsolateList();
         hideLoading();
 
-        if (currentProfile && profiles[currentProfile]) {
-            profiles[currentProfile] = [...isolateList];
-            await saveProfiles();
-            updateProfileSelect();
-        }
+            if (currentProfile && profiles[currentProfile]) {
+                profiles[currentProfile] = [...isolateList];
+                await saveProfiles();
+                updateProfileSelect();
+                await persistDefaultKey('currentProfile', currentProfile);
+            }
     });
 
     appsList.appendChild(node);
@@ -125,38 +308,46 @@ function hideLoading() {
 }
 
 function showSuccess(message) {
-    const toast = document.getElementById('success-toast');
-    const messageEl = document.getElementById('success-message');
-    if (toast && messageEl) {
-        messageEl.textContent = message;
-        toast.classList.remove('translate-x-full', 'toast-hidden');
-        setTimeout(() => {
-            toast.classList.add('translate-x-full', 'toast-hidden');
-        }, 2500);
-    }
+    showToast('success-toast', 'success-message', message, { center: true });
 }
 
 function showError(message) {
-    const toast = document.getElementById('error-toast');
-    const messageEl = document.getElementById('error-message');
-    if (toast && messageEl) {
-        messageEl.textContent = message;
-        toast.classList.remove('translate-x-full', 'toast-hidden');
-        setTimeout(() => {
-            toast.classList.add('translate-x-full', 'toast-hidden');
-        }, 2500);
+    showToast('error-toast', 'error-message', message, { center: false });
+}
+
+// Generic toast helper
+function showToast(toastId, messageId, message, opts = { center: false }) {
+    const toast = document.getElementById(toastId);
+    const messageEl = document.getElementById(messageId);
+    if (!toast || !messageEl) return;
+
+    messageEl.textContent = message;
+    if (opts.center) {
+        messageEl.style.textAlign = 'center';
+        toast.style.display = 'flex';
+        toast.style.justifyContent = 'center';
+        toast.style.alignItems = 'center';
     }
+    toast.classList.remove('translate-x-full', 'toast-hidden');
+    setTimeout(() => {
+        toast.classList.add('translate-x-full', 'toast-hidden');
+        if (opts.center) {
+            messageEl.style.textAlign = '';
+            toast.style.justifyContent = '';
+            toast.style.alignItems = '';
+        }
+    }, 2500);
 }
 
 function updateProfileSelect() {
     const select = document.getElementById('profile-select');
-    select.innerHTML = '<option value="">🔍 Seleziona Profilo</option>';
+    select.innerHTML = `<option value="">${t('select_profile_placeholder')}</option>`;
 
     Object.keys(profiles).forEach(profileName => {
         const option = document.createElement('option');
         option.value = profileName;
         const appCount = profiles[profileName] ? profiles[profileName].length : 0;
-        option.textContent = `📁 ${profileName} (${appCount})`;
+    option.textContent = `${ICONS.folder} ${profileName} (${appCount})`;
         if (profileName === currentProfile) {
             option.selected = true;
         }
@@ -164,9 +355,97 @@ function updateProfileSelect() {
     });
 }
 
+// Import/Export profiles: UI helpers
+function createImportExportControls() {
+    // The actual controls are present in the dedicated HTML panel; this function
+    // wires them to the runtime logic so translations and ICONS can be applied.
+    const exportBtn = document.getElementById('export-profiles-btn');
+    const importBtn = document.getElementById('import-profiles-btn');
+    const importInput = document.getElementById('import-profiles-input');
+    const importTitle = document.getElementById('ns-import-title');
+    if (importTitle) importTitle.textContent = `${t('import_export_title') || 'Import / Export Profiles'}`;
+
+    if (exportBtn) {
+        exportBtn.textContent = `${ICONS.save || '💾'} ${t('export_profiles') || 'Export Profiles'}`;
+        exportBtn.addEventListener('click', () => {
+            const blob = new Blob([JSON.stringify(profiles, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'net-switch-profiles.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showSuccess(t('export_success') || 'Profiles exported successfully');
+        });
+    }
+
+    if (importBtn && importInput) {
+    importBtn.textContent = `${ICONS.import || '📁'} ${t('import_profiles') || 'Import Profiles'}`;
+        importBtn.addEventListener('click', () => importInput.click());
+
+        importInput.addEventListener('change', async (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            try {
+                const text = await f.text();
+                const imported = JSON.parse(text);
+                Object.keys(imported).forEach(k => { profiles[k] = imported[k]; });
+                await saveProfiles();
+                updateProfileSelect();
+                showSuccess(t('import_success') || 'Profiles imported successfully');
+            } catch (err) {
+                showError(t('import_error') || 'Invalid profiles file');
+            }
+        });
+    }
+
+    // Make the two buttons share the full width: 50% / 50%
+    try {
+        const wrapper = exportBtn?.parentElement || importBtn?.parentElement;
+        if (wrapper) {
+            wrapper.style.display = 'flex';
+            wrapper.style.width = '100%';
+            wrapper.style.gap = '0.5rem';
+            // ensure children shrink/grow evenly
+            if (exportBtn) {
+                exportBtn.style.flex = '1 1 50%';
+                exportBtn.style.width = '50%';
+                exportBtn.style.boxSizing = 'border-box';
+            }
+            if (importBtn) {
+                importBtn.style.flex = '1 1 50%';
+                importBtn.style.width = '50%';
+                importBtn.style.boxSizing = 'border-box';
+            }
+        }
+    } catch (e) {
+        // ignore styling errors
+    }
+}
+
+// Update only the textual labels of the import/export panel (no event reattachment)
+function updateImportExportTexts() {
+    try {
+        const exportBtn = document.getElementById('export-profiles-btn');
+        const importBtn = document.getElementById('import-profiles-btn');
+        const importTitle = document.getElementById('ns-import-title');
+
+        if (importTitle) importTitle.textContent = t('import_export_title') || 'Import / Export Profiles';
+        if (exportBtn) exportBtn.textContent = `${ICONS.save || '💾'} ${t('export_profiles') || 'Export Profiles'}`;
+        if (importBtn) importBtn.textContent = `${ICONS.import || '📁'} ${t('import_profiles') || 'Import Profiles'}`;
+    } catch (e) {
+        // ignore
+    }
+}
+
+// initialize import/export controls
+createImportExportControls();
+
 async function loadProfile(profileName) {
     if (!profiles[profileName]) {
-        showError(`Profilo "${profileName}" non trovato`);
+        showError(t('profile_not_found', { name: profileName }));
         return;
     }
 
@@ -194,30 +473,31 @@ async function loadProfile(profileName) {
     // Update UI checkboxes and status
     [...appsList.children].forEach(node => {
         const appName = node.querySelector('p').textContent;
-        const checkbox = node.querySelector('input[type="checkbox"]');
+        const checkbox = node.querySelector('.ns-toggle');
         const statusElement = node.querySelector('.app-status');
         const switchLabel = node.querySelector('.switch-label');
         
         checkbox.checked = isolateList.includes(appName);
         
-        if (checkbox.checked) {
-            statusElement.textContent = '� Isolato';
-            statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
-            switchLabel.textContent = 'Isolato';
-            switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
-        } else {
-            statusElement.textContent = '📡 Connesso';
-            statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
-            switchLabel.textContent = 'Connesso';
-            switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
-        }
+            if (checkbox.checked) {
+                statusElement.textContent = t('isolated');
+                statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
+                switchLabel.textContent = t('isolated');
+                switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
+            } else {
+                statusElement.textContent = t('connected');
+                statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
+                switchLabel.textContent = t('connected');
+                switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
+            }
     });
 
     currentProfile = profileName;
     await saveIsolateList();
     sortChecked();
     hideLoading();
-    showSuccess(`✅ Profilo "${profileName}" attivato • ${profileApps.length} app isolate`);
+    await persistDefaultKey('currentProfile', currentProfile);
+    showSuccess(t('profile_activated', { name: profileName, count: profileApps.length }));
 }
 
 async function saveCurrentProfile(profileName) {
@@ -225,22 +505,24 @@ async function saveCurrentProfile(profileName) {
     await saveProfiles();
     currentProfile = profileName;
     updateProfileSelect();
-    showSuccess(`🎉 Profilo "${profileName}" creato • ${isolateList.length} app configurate`);
+    await persistDefaultKey('currentProfile', currentProfile);
+    showSuccess(t('profile_created', { name: profileName, count: isolateList.length }));
 }
 
 async function deleteProfile(profileName) {
     if (!profileName) {
-        showError(`Nome profilo non valido`);
+        showError(t('invalid_profile_name'));
         return false;
     }
     // Remove the profile from the profiles object
     delete profiles[profileName];
     await saveProfiles();
-    if (currentProfile === profileName) {
+        if (currentProfile === profileName) {
         currentProfile = '';
+        await persistDefaultKey('currentProfile', '');
     }
     updateProfileSelect();
-    showSuccess(`🗑️ Profilo "${profileName}" eliminato`);
+    showSuccess(t('profile_deleted', { name: profileName }));
     // Clean up empty profile entry in config file using sed
     await run(`sed -i "s/\\"${profileName}\\":\\[\\],//g; s/,\\\"${profileName}\\":\\[\\]//g; s/\\"${profileName}\\":\\[\\]//g" ${profilesPath}`);
     return true;
@@ -272,6 +554,9 @@ async function main() {
     }
 
     await loadProfiles();
+
+    // try to restore last selected profile (if any)
+    await loadPersistedProfile();
 
     for (const pkg of installedPackages) {
         const isIsolated = isolated.includes(pkg);
@@ -315,11 +600,11 @@ async function main() {
     document.getElementById('create-profile').addEventListener('click', async () => {
         const newProfileName = document.getElementById('new-profile-name').value.trim();
         if (!newProfileName) {
-            showError('⚠️ Inserisci un nome per il nuovo profilo');
+            showError(t('enter_profile_name'));
             return;
         }
         if (profiles[newProfileName]) {
-            showError('⚠️ Un profilo con questo nome esiste già');
+            showError(t('profile_exists'));
             return;
         }
 
@@ -328,14 +613,14 @@ async function main() {
         await saveIsolateList();
 
         [...appsList.children].forEach(node => {
-            const checkbox = node.querySelector('input[type="checkbox"]');
+            const checkbox = node.querySelector('.ns-toggle');
             const statusElement = node.querySelector('.app-status');
             const switchLabel = node.querySelector('.switch-label');
             
             checkbox.checked = false;
-            statusElement.textContent = '📡 Connesso';
+            statusElement.textContent = t('connected');
             statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
-            switchLabel.textContent = 'Connesso';
+            switchLabel.textContent = t('connected');
             switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
         });
 
@@ -350,7 +635,7 @@ async function main() {
         const selectedProfile = document.getElementById('profile-select').value;
         const profileToDelete = selectedProfile || currentProfile;
         if (!profileToDelete) {
-            showError('⚠️ Seleziona un profilo da eliminare dal menu a tendina');
+            showError(t('select_profile_to_delete'));
             return;
         }
 
@@ -369,19 +654,19 @@ async function main() {
                 currentProfile = '';
 
                 [...appsList.children].forEach(node => {
-                    const checkbox = node.querySelector('input[type="checkbox"]');
+                    const checkbox = node.querySelector('.ns-toggle');
                     const statusElement = node.querySelector('.app-status');
                     const switchLabel = node.querySelector('.switch-label');
                     
                     checkbox.checked = false;
-                    statusElement.textContent = '📡 Connesso';
+                    statusElement.textContent = t('connected');
                     statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
-                    switchLabel.textContent = 'Connesso';
+                    switchLabel.textContent = t('connected');
                     switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
                 });
 
                 sortChecked();
-                showSuccess(`🧹 Tutte le app sono ora connesse`);
+                showSuccess(t('all_apps_connected'));
             }
         }
     });

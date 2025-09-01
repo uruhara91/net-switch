@@ -5,8 +5,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build --emptyOutDir"
+  "dev": "vite",
+  "build": "vite build --emptyOutDir",
+  "build:deploy": "npm run build && rm -rf ../module/webroot/assets/* && cp -r dist/* ../module/webroot/assets/ && cd .. && zip -r module.zip module"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
