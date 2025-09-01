@@ -6,6 +6,7 @@ const appsList = document.getElementById('apps-list');
 
 const configPath = "/data/adb/.config/net-switch/isolated.json";
 const profilesPath = "/data/adb/.config/net-switch/profiles.json";
+const langPath = "/data/adb/.config/net-switch/lang";
 
 let profiles = {};
 let currentProfile = '';
@@ -67,6 +68,10 @@ function applyTranslations() {
     // update profile select placeholder if it exists
     const profileSelect = document.getElementById('profile-select');
     if (profileSelect) profileSelect.innerHTML = `<option value="">${t('select_profile_placeholder')}</option>`;
+
+    // sync lang select value if present
+    const langSelect = document.getElementById('ns-lang-select');
+    if (langSelect) langSelect.value = getLang();
 }
 
 createLangSelector();
@@ -81,6 +86,33 @@ async function run(cmd) {
     }
     return stdout;
 }
+
+// Load persisted language from filesystem (if available) and apply it.
+async function loadPersistedLang() {
+    try {
+        const out = await run(`cat ${langPath} 2>/dev/null || true`);
+        if (out) {
+            const fileLang = out.toString().trim();
+            if (availableLangs.includes(fileLang)) {
+                setLang(fileLang);
+            }
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Persist language changes to filesystem so the selection survives app restarts
+onLangChange(async (lang) => {
+    try {
+        await run(`echo '${lang}' > ${langPath}`);
+    } catch (e) {
+        // ignore write errors
+    }
+});
+
+// attempt to load persisted language
+loadPersistedLang();
 
 function sortChecked() {
     [...appsList.children]
