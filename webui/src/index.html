@@ -25,6 +25,24 @@
       </div>
     </div>
 
+    <!-- Import / Export Profiles Section -->
+    <div class="mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+      <div class="p-4">
+        <div class="mb-4 flex items-center space-x-2">
+          <div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-cyan-600">
+            <i class="fas fa-file-export text-xs text-white"></i>
+          </div>
+          <h2 id="ns-import-title" class="text-lg font-semibold text-gray-800 dark:text-gray-200">Import / Export Profiles</h2>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button id="export-profiles-btn" class="rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 px-3 py-2 text-sm text-white shadow-md hover:from-green-600 hover:to-emerald-700">Export Profiles</button>
+          <button id="import-profiles-btn" class="rounded-lg bg-gradient-to-r from-yellow-500 to-orange-500 px-3 py-2 text-sm text-white shadow-md hover:from-yellow-600 hover:to-orange-600">Import Profiles</button>
+          <input type="file" id="import-profiles-input" accept="application/json" class="hidden" />
+        </div>
+      </div>
+    </div>
+
     <!-- Profiles Section -->
     <div class="mx-3 mt-4 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
       <div class="p-4">

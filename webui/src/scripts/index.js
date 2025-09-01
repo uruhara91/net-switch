@@ -1,12 +1,13 @@
 import { exec, toast } from 'kernelsu';
-import { t, setLang, getLang, onLangChange, availableLangs } from './i18n.js';
+import { t, setLang, getLang, onLangChange, availableLangs, ICONS, getLangDisplay } from './i18n.js';
 
 const template = document.getElementById('app-template').content;
 const appsList = document.getElementById('apps-list');
 
 const configPath = "/data/adb/.config/net-switch/isolated.json";
 const profilesPath = "/data/adb/.config/net-switch/profiles.json";
-const langPath = "/data/adb/.config/net-switch/lang";
+// Single default config file (stores language, last profile, etc.)
+const defaultConfigPath = "/data/adb/.config/net-switch/default.json";
 
 let profiles = {};
 let currentProfile = '';
@@ -36,7 +37,7 @@ function createLangSelector() {
     availableLangs.forEach(lang => {
         const opt = document.createElement('option');
         opt.value = lang;
-        opt.textContent = lang.toUpperCase();
+        opt.textContent = getLangDisplay(lang);
         select.appendChild(opt);
     });
     select.value = getLang();
@@ -57,7 +58,7 @@ function applyTranslations() {
     if (elTitle) elTitle.textContent = t('title');
     if (elSubtitle) elSubtitle.textContent = t('subtitle');
     if (elProfilesTitle) elProfilesTitle.textContent = t('profiles_title');
-    if (elSelectProfile) elSelectProfile.textContent = t('select_profile_placeholder');
+    if (elSelectProfile) elSelectProfile.textContent = `${t('select_profile_placeholder')}`;
     if (elCreate) elCreate.textContent = t('create');
     if (elSearchTitle) elSearchTitle.textContent = t('search_title');
     if (elAppsTitle) elAppsTitle.textContent = t('apps_list_title');
@@ -68,6 +69,27 @@ function applyTranslations() {
     // update profile select placeholder if it exists
     const profileSelect = document.getElementById('profile-select');
     if (profileSelect) profileSelect.innerHTML = `<option value="">${t('select_profile_placeholder')}</option>`;
+
+    // Refresh app list items so their status labels reflect newly selected language
+    if (appsList) {
+        [...appsList.children].forEach(node => {
+            const checkbox = node.querySelector('.ns-toggle');
+            const statusElement = node.querySelector('.app-status');
+            const switchLabel = node.querySelector('.switch-label');
+            if (!checkbox || !statusElement || !switchLabel) return;
+            if (checkbox.checked) {
+                statusElement.textContent = `${t('isolated')}`;
+                statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
+                switchLabel.textContent = `${t('isolated')}`;
+                switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
+            } else {
+                statusElement.textContent = `${t('connected')}`;
+                statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
+                switchLabel.textContent = `${t('connected')}`;
+                switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
+            }
+        });
+    }
 
     // sync lang select value if present
     const langSelect = document.getElementById('ns-lang-select');
@@ -90,11 +112,15 @@ async function run(cmd) {
 // Load persisted language from filesystem (if available) and apply it.
 async function loadPersistedLang() {
     try {
-        const out = await run(`cat ${langPath} 2>/dev/null || true`);
+        const out = await run(`cat ${defaultConfigPath} 2>/dev/null || true`);
         if (out) {
-            const fileLang = out.toString().trim();
-            if (availableLangs.includes(fileLang)) {
-                setLang(fileLang);
+            try {
+                const cfg = JSON.parse(out.toString());
+                if (cfg.lang && availableLangs.includes(cfg.lang)) setLang(cfg.lang);
+            } catch (e) {
+                // if file is plain text (legacy) try to treat as single lang value
+                const fileLang = out.toString().trim();
+                if (availableLangs.includes(fileLang)) setLang(fileLang);
             }
         }
     } catch (e) {
@@ -102,16 +128,57 @@ async function loadPersistedLang() {
     }
 }
 
-// Persist language changes to filesystem so the selection survives app restarts
-onLangChange(async (lang) => {
+// Default config read/write helpers (store json with { lang, currentProfile })
+async function readDefaultConfig() {
     try {
-        await run(`echo '${lang}' > ${langPath}`);
+        const out = await run(`cat ${defaultConfigPath} 2>/dev/null || true`);
+        if (!out) return {};
+        try {
+            return JSON.parse(out.toString());
+        } catch (e) {
+            // legacy plain text: assume it's just the lang
+            return { lang: out.toString().trim() };
+        }
+    } catch (e) {
+        return {};
+    }
+}
+
+async function writeDefaultConfig(cfg) {
+    try {
+        await run(`echo '${JSON.stringify(cfg)}' > ${defaultConfigPath}`);
     } catch (e) {
         // ignore write errors
     }
+}
+
+async function persistDefaultKey(key, value) {
+    try {
+        const cfg = await readDefaultConfig();
+        cfg[key] = value;
+        await writeDefaultConfig(cfg);
+    } catch (e) {
+        // ignore
+    }
+}
+
+async function loadPersistedProfile() {
+    try {
+        const cfg = await readDefaultConfig();
+        if (cfg.currentProfile && profiles[cfg.currentProfile]) {
+            await loadProfile(cfg.currentProfile);
+        }
+    } catch (e) {
+        // ignore
+    }
+}
+
+// Persist language changes to the default config so selection survives restarts
+onLangChange(async (lang) => {
+    await persistDefaultKey('lang', lang);
 });
 
-// attempt to load persisted language
+// attempt to load persisted language (and any legacy value)
 loadPersistedLang();
 
 function sortChecked() {
@@ -179,11 +246,12 @@ function populateApp(name, checked) {
         await saveIsolateList();
         hideLoading();
 
-        if (currentProfile && profiles[currentProfile]) {
-            profiles[currentProfile] = [...isolateList];
-            await saveProfiles();
-            updateProfileSelect();
-        }
+            if (currentProfile && profiles[currentProfile]) {
+                profiles[currentProfile] = [...isolateList];
+                await saveProfiles();
+                updateProfileSelect();
+                await persistDefaultKey('currentProfile', currentProfile);
+            }
     });
 
     appsList.appendChild(node);
@@ -224,9 +292,18 @@ function showSuccess(message) {
     const messageEl = document.getElementById('success-message');
     if (toast && messageEl) {
         messageEl.textContent = message;
+        // center the message text and center the toast container
+        messageEl.style.textAlign = 'center';
+        toast.style.display = 'flex';
+        toast.style.justifyContent = 'center';
+        toast.style.alignItems = 'center';
         toast.classList.remove('translate-x-full', 'toast-hidden');
         setTimeout(() => {
             toast.classList.add('translate-x-full', 'toast-hidden');
+            // restore inline styles
+            messageEl.style.textAlign = '';
+            toast.style.justifyContent = '';
+            toast.style.alignItems = '';
         }, 2500);
     }
 }
@@ -251,13 +328,85 @@ function updateProfileSelect() {
         const option = document.createElement('option');
         option.value = profileName;
         const appCount = profiles[profileName] ? profiles[profileName].length : 0;
-        option.textContent = `📁 ${profileName} (${appCount})`;
+    option.textContent = `${ICONS.folder} ${profileName} (${appCount})`;
         if (profileName === currentProfile) {
             option.selected = true;
         }
         select.appendChild(option);
     });
 }
+
+// Import/Export profiles: UI helpers
+function createImportExportControls() {
+    // The actual controls are present in the dedicated HTML panel; this function
+    // wires them to the runtime logic so translations and ICONS can be applied.
+    const exportBtn = document.getElementById('export-profiles-btn');
+    const importBtn = document.getElementById('import-profiles-btn');
+    const importInput = document.getElementById('import-profiles-input');
+    const importTitle = document.getElementById('ns-import-title');
+    if (importTitle) importTitle.textContent = `${t('import_export_title') || 'Import / Export Profiles'}`;
+
+    if (exportBtn) {
+        exportBtn.textContent = `${ICONS.save} ${t('export_profiles') || 'Export Profiles'}`;
+        exportBtn.addEventListener('click', () => {
+            const blob = new Blob([JSON.stringify(profiles, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'net-switch-profiles.json';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    if (importBtn && importInput) {
+        importBtn.textContent = `${ICONS.import} ${t('import_profiles') || 'Import Profiles'}`;
+        importBtn.addEventListener('click', () => importInput.click());
+
+        importInput.addEventListener('change', async (e) => {
+            const f = e.target.files && e.target.files[0];
+            if (!f) return;
+            try {
+                const text = await f.text();
+                const imported = JSON.parse(text);
+                Object.keys(imported).forEach(k => { profiles[k] = imported[k]; });
+                await saveProfiles();
+                updateProfileSelect();
+                showSuccess(t('profiles_imported') || 'Profiles imported');
+            } catch (err) {
+                showError(t('profiles_import_error') || 'Invalid profiles file');
+            }
+        });
+    }
+
+    // Make the two buttons share the full width: 50% / 50%
+    try {
+        const wrapper = exportBtn?.parentElement || importBtn?.parentElement;
+        if (wrapper) {
+            wrapper.style.display = 'flex';
+            wrapper.style.width = '100%';
+            wrapper.style.gap = '0.5rem';
+            // ensure children shrink/grow evenly
+            if (exportBtn) {
+                exportBtn.style.flex = '1 1 50%';
+                exportBtn.style.width = '50%';
+                exportBtn.style.boxSizing = 'border-box';
+            }
+            if (importBtn) {
+                importBtn.style.flex = '1 1 50%';
+                importBtn.style.width = '50%';
+                importBtn.style.boxSizing = 'border-box';
+            }
+        }
+    } catch (e) {
+        // ignore styling errors
+    }
+}
+
+// initialize import/export controls
+createImportExportControls();
 
 async function loadProfile(profileName) {
     if (!profiles[profileName]) {
@@ -312,6 +461,7 @@ async function loadProfile(profileName) {
     await saveIsolateList();
     sortChecked();
     hideLoading();
+    await persistDefaultKey('currentProfile', currentProfile);
     showSuccess(t('profile_activated', { name: profileName, count: profileApps.length }));
 }
 
@@ -320,6 +470,7 @@ async function saveCurrentProfile(profileName) {
     await saveProfiles();
     currentProfile = profileName;
     updateProfileSelect();
+    await persistDefaultKey('currentProfile', currentProfile);
     showSuccess(t('profile_created', { name: profileName, count: isolateList.length }));
 }
 
@@ -331,8 +482,9 @@ async function deleteProfile(profileName) {
     // Remove the profile from the profiles object
     delete profiles[profileName];
     await saveProfiles();
-    if (currentProfile === profileName) {
+        if (currentProfile === profileName) {
         currentProfile = '';
+        await persistDefaultKey('currentProfile', '');
     }
     updateProfileSelect();
     showSuccess(t('profile_deleted', { name: profileName }));
@@ -367,6 +519,9 @@ async function main() {
     }
 
     await loadProfiles();
+
+    // try to restore last selected profile (if any)
+    await loadPersistedProfile();
 
     for (const pkg of installedPackages) {
         const isIsolated = isolated.includes(pkg);
