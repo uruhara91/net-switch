@@ -1,76 +1,81 @@
 # Net Switch
+
 ![Net Switch](./banner.webp)
 
-Net Switch isola le app dall'accesso a Internet sul tuo dispositivo Android usando regole iptables. Leggero, stand-alone e progettato per offrire controllo granulare sulle app senza usare VPN.
+Net Switch isolates apps from accessing the Internet on your Android device using iptables rules. Lightweight, stand-alone, and designed to give you granular control over app connectivity without using a VPN.
 
 ---
 
-## Highlights (novità)
-- Profiles: sistema di profili per salvare/riattivare insiemi di app isolate (nuovo)
-- WebUI rinnovata: interfaccia responsive, animazioni e feedback migliorati (Vite + Tailwind)
-- Miglior gestione: rimozione automatica delle app disinstallate dall'elenco di isolate
-- Feedback in tempo reale: toasts, spinner di caricamento e badge di stato
+## Highlights (What's New)
+
+* **Profiles**: Save/restore sets of isolated apps via a profile system (new)
+* **Backup Manager**: Allows you to save and restore created profiles (new)
+* **Revamped WebUI**: Responsive interface with improved animations and feedback (Vite + Tailwind)
 
 ---
 
-## Panoramica rapida
-- Tipo: Magisk module / KernelSU compatible WebUI
-- Versione attuale: v1.3 (vedi `version` e `update.json`)
-- Architettura: interfaccia WebUI servita dal modulo + comandi di sistema (iptables, ip6tables, pm)
+## Supported Root Managers
 
-## File modificati rilevanti in questa branch
-- `webui/src/index.html` — nuova UI con template per la lista app e componenti (toasts, spinner, switch)
-- `webui/src/scripts/index.js` — logica di gestione profili, applicazione regole iptables, ricerca e salvataggio config
-- `webui/src/styles/index.css` — stile moderno, animazioni e miglioramenti UX (scrollbar, pulsanti, switch)
-- `update.json`, `version`, `module/module.prop`, `changelog.md` — aggiornamento metadati a v1.3
 
-Queste modifiche introducono il supporto ai profili e una UI più moderna e reattiva.
+- [APatch](https://github.com/bmax121/APatch) 
+- [KernelSU](https://github.com/tiann/KernelSU)
+- [Magisk](https://github.com/topjohnwu/Magisk)  <sup>([no WebUI](https://github.com/topjohnwu/Magisk/issues/8609#event-15568590949)👀)</sup>
 
 ---
 
-## Come usare (WebUI)
-1. Flasha il modulo Net Switch e riavvia il dispositivo.
-2. Apri la WebUI (es. tramite KsuWebUI o MMRL se usi Magisk).
-3. Usa la barra di ricerca per trovare le app.
-4. Usa l'interruttore di ogni app per isolare (viene applicata una regola iptables per l'UID dell'app).
-5. Crea un profilo per salvare lo stato attuale delle app isolate. Puoi selezionare e applicare profili in seguito.
+## Key Files Modified in This Branch
 
-### Note rapide
-- Le modifiche vengono applicate immediatamente.
-- Se un'app viene disinstallata, viene rimossa automaticamente dall'elenco di isolate al prossimo avvio della UI.
+* `webui/src/index.html` — new UI with app list templates and components (toasts, spinner, switches)
+* `webui/src/scripts/index.js` — logic for managing profiles, applying iptables rules, search and config saving
+* `webui/src/styles/index.css` — modern styling, animations, and UX improvements (scrollbar, buttons, switches)
+* `update.json`, `version`, `module/module.prop`, `changelog.md` — metadata updated for v1.3
+
+These changes introduce profile support, backup manager and a more modern, responsive UI.
 
 ---
 
-## Uso da terminale (comandi forniti dal modulo)
-Apri un terminale con permessi root (adb shell o Termux con root) e usa:
+## How to Use (WebUI)
+
+1. Flash the Net Switch module and reboot your device.
+2. Open the WebUI (e.g., via KsuWebUI or MMRL if using Magisk).
+3. Use the search bar to find apps.
+4. Create a profile to save the current isolation state. You can select and apply profiles later.
+5. Toggle each app to isolate it (an iptables rule is applied for the app’s UID).
+
+___
+
+## Terminal Usage (Commands Provided by the Module)
+
+Open a terminal with root permissions (adb shell or Termux with root) and use:
 
 ```bash
-netswitch block <package>      # isola (blocca) il package
-netswitch unblock <package>    # rimuove l'isolamento su package
-netswitch list                 # mostra package attualmente isolati
-netswitch unblock all          # rimuove l'isolamento da tutti
+netswitch block <package>      # isolate (block) the package
+netswitch unblock <package>    # remove isolation from the package
+netswitch list                 # list currently isolated packages
+netswitch unblock all          # remove isolation from all packages
 ```
 
----
-
-## Changelog sintetico (ultime modifiche)
-- v1.3 — Profiles system, WebUI overhaul, UX improvements, automatic cleanup of uninstalled apps
-- v1.2 — Fix UID fetch, remove uninstalled apps from isolated.json, migrate WebUI to Vite
-
-Per il changelog completo vedere `changelog.md`.
+![Net-switch Terminal Example](./terminal.webp)
 
 ---
 
-## Contribuire
-- Segnala bug e feature su: https://github.com/Rem01Gaming/net-switch/issues
-- PRs benvenute: https://github.com/Rem01Gaming/net-switch/pulls
+## Changelog Summary (Recent Changes)
+
+* **v1.3** — Profiles system, WebUI overhaul, UX improvements, automatic cleanup of uninstalled apps
 
 ---
 
-## Link utili
-- Release: https://github.com/Rem01Gaming/net-switch/releases
-- Telegram: https://t.me/rem01schannel
+## Contribute
+
+* Report bugs and request features at: [https://github.com/Rem01Gaming/net-switch/issues](https://github.com/Rem01Gaming/net-switch/issues)
+* PRs welcome: [https://github.com/Rem01Gaming/net-switch/pulls](https://github.com/Rem01Gaming/net-switch/pulls)
+* UX/UI: [Antonio Riccio](https://github.com/Antonio-Riccio)
 
 ---
 
-_File aggiornato automaticamente per riflettere le nuove implementazioni della branch `FE/UpdateUX_UI`._
+## Useful Links
+
+* Releases: [https://github.com/Rem01Gaming/net-switch/releases](https://github.com/Rem01Gaming/net-switch/releases)
+* Telegram: [https://t.me/rem01schannel](https://t.me/rem01schannel)
+
+---
