@@ -108,7 +108,7 @@ onLangChange(() => {
   applyTranslations();
   // Refresh status labels for all app nodes immediately
   if (appsList) {
-    [...appsList.children].forEach(node => updateStatus(node));
+    [...appsList.children].forEach((node) => updateStatus(node));
   }
 });
 
@@ -179,10 +179,14 @@ async function loadPersistedProfile() {
     const cfg = await readDefaultConfig();
     if (cfg.currentProfile && profiles[cfg.currentProfile]) {
       await loadProfile(cfg.currentProfile);
+
+      // Update profile select to show the loaded profile
+      const profileSelect = document.getElementById("profile-select");
+      if (profileSelect) {
+        profileSelect.value = cfg.currentProfile;
+      }
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 // Persist language changes to the default config so selection survives restarts
@@ -204,7 +208,7 @@ const isolateList = [];
 // Helper: update status text and classes for a node using its checkbox state
 // Safe id generator for DOM elements (sanitizes package names)
 function safeId(prefix, name) {
-  return `${prefix}-${name.replace(/[^a-z0-9]/gi, '-')}`;
+  return `${prefix}-${name.replace(/[^a-z0-9]/gi, "-")}`;
 }
 
 function updateStatus(node) {
@@ -213,21 +217,31 @@ function updateStatus(node) {
   const switchId = node?.dataset?.switchId;
   const checkboxId = node?.dataset?.checkboxId;
 
-  const statusElement = (statusId && document.getElementById(statusId)) || node.querySelector('.app-status');
-  const switchLabel = (switchId && document.getElementById(switchId)) || node.querySelector('.switch-label');
-  const checkbox = (checkboxId && document.getElementById(checkboxId)) || node.querySelector('.ns-toggle');
+  const statusElement =
+    (statusId && document.getElementById(statusId)) ||
+    node.querySelector(".app-status");
+  const switchLabel =
+    (switchId && document.getElementById(switchId)) ||
+    node.querySelector(".switch-label");
+  const checkbox =
+    (checkboxId && document.getElementById(checkboxId)) ||
+    node.querySelector(".ns-toggle");
 
   if (!statusElement || !switchLabel || !checkbox) return;
   if (checkbox.checked) {
-    statusElement.textContent = t('isolated');
-    statusElement.className = 'app-status text-red-600 dark:text-red-400 font-medium';
-    switchLabel.textContent = t('isolated');
-    switchLabel.className = 'text-xs text-red-600 dark:text-red-400 switch-label font-medium';
+    statusElement.textContent = t("isolated");
+    statusElement.className =
+      "app-status text-red-600 dark:text-red-400 font-medium";
+    switchLabel.textContent = t("isolated");
+    switchLabel.className =
+      "text-xs text-red-600 dark:text-red-400 switch-label font-medium";
   } else {
-    statusElement.textContent = t('connected');
-    statusElement.className = 'app-status text-green-600 dark:text-green-400 font-medium';
-    switchLabel.textContent = t('connected');
-    switchLabel.className = 'text-xs text-green-600 dark:text-green-400 switch-label font-medium';
+    statusElement.textContent = t("connected");
+    statusElement.className =
+      "app-status text-green-600 dark:text-green-400 font-medium";
+    switchLabel.textContent = t("connected");
+    switchLabel.className =
+      "text-xs text-green-600 dark:text-green-400 switch-label font-medium";
   }
 }
 
@@ -312,13 +326,21 @@ function populateApp(name, checked) {
       try {
         if (checkbox.checked) {
           isolateList.push(name);
-          await run(`iptables -I OUTPUT -m owner --uid-owner ${appUid} -j REJECT`);
-          await run(`ip6tables -I OUTPUT -m owner --uid-owner ${appUid} -j REJECT`);
+          await run(
+            `iptables -I OUTPUT -m owner --uid-owner ${appUid} -j REJECT`,
+          );
+          await run(
+            `ip6tables -I OUTPUT -m owner --uid-owner ${appUid} -j REJECT`,
+          );
         } else {
           const index = isolateList.indexOf(name);
           if (index !== -1) isolateList.splice(index, 1);
-          await run(`iptables -D OUTPUT -m owner --uid-owner ${appUid} -j REJECT`);
-          await run(`ip6tables -D OUTPUT -m owner --uid-owner ${appUid} -j REJECT`);
+          await run(
+            `iptables -D OUTPUT -m owner --uid-owner ${appUid} -j REJECT`,
+          );
+          await run(
+            `ip6tables -D OUTPUT -m owner --uid-owner ${appUid} -j REJECT`,
+          );
         }
 
         // Update status after successful operation
@@ -531,6 +553,8 @@ function updateIoTexts() {
   // Use unified Backup manager title. Action and path descriptions use safe fallbacks.
   if (title) title.textContent = t("BackUp_manager") || "Backup manager";
   if (actionBtn) actionBtn.textContent = t("run") || "Run";
+  const backBtn = document.getElementById("io-back-btn");
+  if (backBtn) backBtn.textContent = t("back_button") || "Back";
   const modeLabelEl = document.getElementById("io-mode-label");
   const optExport = document.getElementById("io-option-export");
   const optImport = document.getElementById("io-option-import");
@@ -554,40 +578,42 @@ if (ioMode) {
 }
 
 if (ioActionBtn) {
-  ioActionBtn.addEventListener('click', async () => {
-    const mode = ioMode?.value || 'export';
-    const path = (ioPathInput?.value || '').trim();
+  ioActionBtn.addEventListener("click", async () => {
+    const mode = ioMode?.value || "export";
+    const path = (ioPathInput?.value || "").trim();
     if (!path) {
-      showError(t('invalid_path') || 'Percorso non valido');
+      showError(t("invalid_path") || "Percorso non valido");
       return;
     }
 
     try {
-      if (mode === 'export') {
+      if (mode === "export") {
         // copy from profilesPath -> path
         const out = await run(`cp ${profilesPath} '${path}'`);
         if (out === undefined) {
-          showError(t('export_failed') || 'Error exporting profiles');
+          showError(t("export_failed") || "Error exporting profiles");
           return;
         }
         await run(`chmod 644 '${path}' || true`);
-        showSuccess(t('export_success') || 'Profiles exported successfully');
+        showSuccess(t("export_success") || "Profiles exported successfully");
       } else {
         // import: copy from path -> profilesPath (overwrite)
         // create automatic backup of current profiles if present
-        await run(`if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`);
+        await run(
+          `if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`,
+        );
         const out = await run(`cp '${path}' ${profilesPath}`);
         if (out === undefined) {
-          showError(t('import_failed') || 'Error importing profiles');
+          showError(t("import_failed") || "Error importing profiles");
           return;
         }
         await run(`chmod 644 ${profilesPath} || true`);
         await loadProfiles();
         updateProfileSelect();
-        showSuccess(t('import_success') || 'Profiles imported successfully');
+        showSuccess(t("import_success") || "Profiles imported successfully");
       }
     } catch (err) {
-      showError(mode === 'export' ? t('export_failed') : t('import_failed'));
+      showError(mode === "export" ? t("export_failed") : t("import_failed"));
     }
   });
 }
@@ -712,15 +738,17 @@ async function main() {
 
   await loadProfiles();
 
-  // try to restore last selected profile (if any)
-  await loadPersistedProfile();
-
+  // Populate all apps first
   for (const pkg of installedPackages) {
     const isIsolated = isolated.includes(pkg);
     populateApp(pkg, isIsolated);
   }
 
+  // Sort apps initially
   sortChecked();
+
+  // Then try to restore last selected profile (if any) - this will override the isolated list
+  await loadPersistedProfile();
 
   const searchInput = document.getElementById("search");
   searchInput.addEventListener("input", (e) => {
@@ -828,8 +856,17 @@ async function main() {
 // --- Mock / dev helper -------------------------------------------------
 function isMockMode() {
   try {
-    if (typeof location !== 'undefined' && location.search && location.search.indexOf('mock=1') !== -1) return true;
-    if (typeof localStorage !== 'undefined' && localStorage.getItem('ns-mock') === '1') return true;
+    if (
+      typeof location !== "undefined" &&
+      location.search &&
+      location.search.indexOf("mock=1") !== -1
+    )
+      return true;
+    if (
+      typeof localStorage !== "undefined" &&
+      localStorage.getItem("ns-mock") === "1"
+    )
+      return true;
   } catch (e) {
     // ignore
   }
@@ -850,7 +887,7 @@ async function mockMain() {
   // some are isolated by default
   for (let i = 0; i < fakePkgs.length; i++) {
     const name = fakePkgs[i];
-    const isIsolated = (i % 7) === 0; // every 7th app isolated
+    const isIsolated = i % 7 === 0; // every 7th app isolated
     if (isIsolated) isolateList.push(name);
     populateApp(name, isIsolated);
   }
@@ -865,7 +902,7 @@ async function mockMain() {
   sortChecked();
   applyTranslations();
   // show a toast so tester sees mock mode active
-  showSuccess(t('operation_completed') || 'Mock mode active');
+  showSuccess(t("operation_completed") || "Mock mode active");
 }
 
 // Start application: if mock flag present, run mockMain for local testing
