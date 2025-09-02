@@ -17,7 +17,7 @@ Net Switch isolates apps from accessing the Internet on your Android device usin
 ## Supported Root Managers
 
 
-- [APatch](https://github.com/bmax121/APatch) 
+- [APatch](https://github.com/bmax121/APatch)
 - [KernelSU](https://github.com/tiann/KernelSU)
 - [Magisk](https://github.com/topjohnwu/Magisk)  <sup>([no WebUI](https://github.com/topjohnwu/Magisk/issues/8609#event-15568590949)👀)</sup>
 
@@ -61,7 +61,7 @@ netswitch unblock all          # remove isolation from all packages
 
 ## Changelog Summary (Recent Changes)
 
-* **v1.3** — Profiles system, WebUI overhaul, UX improvements, automatic cleanup of uninstalled apps
+* **v1.3** — Profiles system, WebUI overhaul, UX improvements, Backup manager
 
 ---
 
