@@ -8,7 +8,7 @@ import {
   ICONS,
   getLangDisplay,
 } from "./i18n.js";
-
+import '@fortawesome/fontawesome-free/css/all.min.css';
 const template = document.getElementById("app-template").content;
 const appsList = document.getElementById("apps-list");
 

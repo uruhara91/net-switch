@@ -5,9 +5,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-  "dev": "vite",
-  "build": "vite build --emptyOutDir",
-  "build:deploy": "npm run build && rm -rf ../module/webroot/assets/* && cp -r dist/* ../module/webroot/assets/ && cd .. && zip -r module.zip module"
+    "dev": "vite",
+    "build": "vite build --emptyOutDir",
+    "build:deploy": "npm run build && rm -rf ../module/webroot/assets/* && cp -r dist/* ../module/webroot/assets/ && cd .. && zip -r module.zip module"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
@@ -20,6 +20,7 @@
     "vite-plugin-mkcert": "^1.17.8"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.0.1",
     "kernelsu": "^1.0.6",
     "mmrl": "^0.2.26"
   }
