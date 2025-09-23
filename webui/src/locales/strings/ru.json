@@ -39,5 +39,8 @@
   "export_success": "Профили успешно экспортированы",
   "import_failed": "Импорт не удался",
   "import_success": "Профили успешно импортированы",
-  "import_export_title": "Импорт / Экспорт профилей"
+  "import_export_title": "Импорт / Экспорт профилей",
+  "select_language": "Выбрать язык",
+  "select_language_desc_1": "Выберите предпочитаемый язык интерфейса.",
+  "select_language_desc_2": "Приложение запомнит ваш выбор."
 }

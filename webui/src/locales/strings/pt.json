@@ -39,5 +39,8 @@
   "export_success": "Perfis exportados com sucesso",
   "import_failed": "Importação falhou",
   "import_success": "Perfis importados com sucesso",
-  "import_export_title": "Importar / Exportar Perfis"
+  "import_export_title": "Importar / Exportar Perfis",
+  "select_language": "Selecionar idioma",
+  "select_language_desc_1": "Escolha o idioma de interface preferido.",
+  "select_language_desc_2": "O app lembrará sua escolha."
 }

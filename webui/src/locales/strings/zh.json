@@ -39,5 +39,8 @@
   "export_success": "配置文件导出成功",
   "import_failed": "导入失败",
   "import_success": "配置文件导入成功",
-  "import_export_title": "导入/导出配置文件"
+  "import_export_title": "导入/导出配置文件",
+  "select_language": "选择语言",
+  "select_language_desc_1": "选择您偏好的界面语言。",
+  "select_language_desc_2": "应用会记住您的选择。"
 }

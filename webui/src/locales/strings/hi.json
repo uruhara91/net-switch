@@ -39,5 +39,8 @@
   "export_success": "प्रोफ़ाइल सफलतापूर्वक निर्यात की गई",
   "import_failed": "आयात असफल",
   "import_success": "प्रोफ़ाइल सफलतापूर्वक आयात की गई",
-  "import_export_title": "प्रोफ़ाइल आयात / निर्यात"
+  "import_export_title": "प्रोफ़ाइल आयात / निर्यात",
+  "select_language": "भाषा चुनें",
+  "select_language_desc_1": "अपनी पसंद की इंटरफ़ेस भाषा चुनें।",
+  "select_language_desc_2": "ऐप आपकी पसंद को याद रखेगा।"
 }
