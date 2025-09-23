@@ -24,7 +24,7 @@
   "profile_exists": "⚠️ Ein Profil mit diesem Namen existiert bereits",
   "select_profile_to_delete": "⚠️ Wählen Sie ein Profil zum Löschen aus",
   "all_apps_connected": "🧹 Alle Apps sind jetzt verbunden",
-  "backup_manager": "Backup-Manager",
+  "backup_manager": "Sicherungsmanager",
   "run": "Ausführen",
   "back_button": "Zurück",
   "mode_label": "Modus",

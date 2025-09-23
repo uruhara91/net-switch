@@ -257,9 +257,16 @@ function updateProfileSelect() {
   const profileSelect = document.getElementById("profile-select");
   if (!profileSelect) return;
 
-  const placeholder =
-    (getTranslation && getTranslation("select_profile")) || "Select profile";
-  profileSelect.innerHTML = `<option value="">${placeholder}</option>`;
+  profileSelect.innerHTML = "";
+
+  const placeholderOption = document.createElement("option");
+  placeholderOption.value = "";
+  placeholderOption.setAttribute("data-i18n", "select_profile");
+ 
+  placeholderOption.textContent =
+    (typeof getTranslation === "function" && getTranslation("select_profile")) ||
+    "Select profile";
+  profileSelect.appendChild(placeholderOption);
 
   Object.keys(profiles).forEach((profileName) => {
     const option = document.createElement("option");
