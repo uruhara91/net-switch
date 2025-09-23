@@ -40,4 +40,7 @@
   "import_failed": "Importación fallida",
   "import_success": "Perfiles importados exitosamente",
   "import_export_title": "Importar / Exportar Perfiles"
+  ,"select_language": "Seleccionar idioma",
+  "select_language_desc_1": "Elige tu idioma preferido para la interfaz.",
+  "select_language_desc_2": "La app recordará tu elección."
 }

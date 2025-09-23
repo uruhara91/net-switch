@@ -188,7 +188,9 @@ async function initI18n() {
       button.textContent = name;
       button.dataset.lang = code;
       button.className =
-        "btn btn-block bg-primary hover:bg-primary text-on-primary py-1";
+        "btn btn-block bg-primary hover:bg-primary text-on-primary py-1 w-full rounded-md text-left";
+      button.setAttribute("role", "button");
+      button.setAttribute("aria-pressed", "false");
       languageSelection.appendChild(button);
     }
 
@@ -227,21 +229,25 @@ async function initI18n() {
 
     // Handle language selection
     languageSelection.addEventListener("click", async (e) => {
-      if (e.target.tagName === "BUTTON") {
-        const newLang = e.target.dataset.lang;
-        if (newLang) {
-          const oldTranslations = currentTranslations;
-          try {
-            currentTranslations = await loadTranslations(newLang);
-            applyTranslations(currentTranslations);
-            localStorage.setItem("selectedLanguage", newLang);
-            languageModal.close();
-            document.documentElement.classList.remove("modal-open");
-          } catch (error) {
-            currentTranslations = oldTranslations;
-            console.error("Language switch failed:", error);
-          }
-        }
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const newLang = btn.dataset.lang;
+      if (!newLang) return;
+
+      languageSelection.querySelectorAll("button").forEach((b) => {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+
+      const oldTranslations = currentTranslations;
+      try {
+        currentTranslations = await loadTranslations(newLang);
+        applyTranslations(currentTranslations);
+        localStorage.setItem("selectedLanguage", newLang);
+        languageModal.close();
+        document.documentElement.classList.remove("modal-open");
+      } catch (error) {
+        currentTranslations = oldTranslations;
+        console.error("Language switch failed:", error);
       }
     });
   } catch (error) {

@@ -297,17 +297,25 @@
     <dialog id="language_modal" class="modal rounded-lg border-none bg-white p-0 shadow-xl dark:bg-gray-800">
         <div class="p-6">
             <div class="mb-4 flex items-center justify-between">
-                <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200">
+                <h3 data-i18n="select_language" class="text-lg font-semibold text-gray-800 dark:text-gray-200">
                     Select Language
                 </h3>
-                <button onclick="language_modal.close()"
-                    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                    <i class="fas fa-times"></i>
+                <button id="language-modal-close" onclick="language_modal.close()"
+                    class="flex items-center justify-center h-8 w-8 rounded-md bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 border border-gray-100 shadow-sm">
+                    <i class="fas fa-times text-sm"></i>
                 </button>
             </div>
-            <div id="language_selection" class="grid gap-2">
-                <!-- Language buttons will be populated by JavaScript -->
+
+            <div class="mb-2 text-sm text-gray-600 dark:text-gray-400">
+                <div data-i18n="select_language_desc_1">Choose your preferred interface language.</div>
+                <div data-i18n="select_language_desc_2" class="mt-1">The app will remember your choice.</div>
             </div>
+
+            <div id="language_selection" class="flex flex-col gap-2 mt-4">
+                <!-- Language buttons will be populated by JavaScript (vertical list for mobile) -->
+            </div>
+
+
         </div>
     </dialog>
 </body>

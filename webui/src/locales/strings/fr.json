@@ -40,4 +40,7 @@
   "import_failed": "Échec de l'importation",
   "import_success": "Profils importés avec succès",
   "import_export_title": "Importer / Exporter les Profils"
+  ,"select_language": "Sélectionner la langue",
+  "select_language_desc_1": "Choisissez la langue d'interface préférée.",
+  "select_language_desc_2": "L'application se souviendra de votre choix."
 }

@@ -40,4 +40,7 @@
   "import_failed": "فشل الاستيراد",
   "import_success": "تم استيراد الملفات الشخصية بنجاح",
   "import_export_title": "استيراد / تصدير الملفات الشخصية"
+  ,"select_language": "اختَر اللغة",
+  "select_language_desc_1": "اختَر لغة التواصل المفضلة.",
+  "select_language_desc_2": "سيتذكر التطبيق اختيارك."
 }

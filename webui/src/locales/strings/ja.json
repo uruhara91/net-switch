@@ -39,5 +39,8 @@
   "export_success": "プロファイルのエクスポートに成功",
   "import_failed": "インポートに失敗",
   "import_success": "プロファイルのインポートに成功",
-  "import_export_title": "プロファイルのインポート/エクスポート"
+  "import_export_title": "プロファイルのインポート/エクスポート",
+  "select_language": "言語を選択",
+  "select_language_desc_1": "使用するインターフェースの言語を選んでください。",
+  "select_language_desc_2": "アプリはあなたの選択を記憶します。"
 }
