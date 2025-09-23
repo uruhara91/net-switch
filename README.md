@@ -1,81 +1,62 @@
-# Net Switch
-
+# Net Switch: Isolate Apps from Internet Access
 ![Net Switch](./banner.webp)
 
-Net Switch isolates apps from accessing the Internet on your Android device using iptables rules. Lightweight, stand-alone, and designed to give you granular control over app connectivity without using a VPN.
+Net Switch is a Magisk module to isolate apps from accessing the internet on your Android device. This tool gives you complete control over which apps can send or receive data, improving security, privacy, and saving bandwidth.
 
----
+Fully standalone, operates fully on iptables.
 
-## Highlights (What's New)
-
-* **Profiles**: Save/restore sets of isolated apps via a profile system (new)
-* **Backup Manager**: Allows you to save and restore created profiles (new)
-* **Revamped WebUI**: Responsive interface with improved animations and feedback (Vite + Tailwind)
-
----
+## Features
+- Per-app internet isolation setting
+- Operates without VPN (unlike AFWall)
+- Don't suck on battery
+- Module WebUI for easy configuration
+- **Profiles**: Save and restore sets of isolated apps (new in v1.3)
+- **Backup Manager**: Save and restore created profiles (new in v1.3)
+- **Revamped WebUI**: Responsive design with animations and feedback (new in v1.3)
 
 ## Supported Root Managers
-
-
-- [APatch](https://github.com/bmax121/APatch)
+- [APatch](https://github.com/bmax121/APatch) 
 - [KernelSU](https://github.com/tiann/KernelSU)
 - [Magisk](https://github.com/topjohnwu/Magisk)  <sup>([no WebUI](https://github.com/topjohnwu/Magisk/issues/8609#event-15568590949)👀)</sup>
 
----
+### WebUI on Magisk
+Magisk doesn't support module WebUI on their manager, but you can use one of these apps to open Net Switch WebUI.
 
-## Key Files Modified in This Branch
+- [KsuWebUI](https://github.com/5ec1cff/KsuWebUIStandalone)
+- [MMRL](https://github.com/DerGoogler/MMRL)   <sup>👍</sup>
 
-* `webui/src/index.html` — new UI with app list templates and components (toasts, spinner, switches)
-* `webui/src/scripts/index.js` — logic for managing profiles, applying iptables rules, search and config saving
-* `webui/src/styles/index.css` — modern styling, animations, and UX improvements (scrollbar, buttons, switches)
-* `update.json`, `version`, `module/module.prop`, `changelog.md` — metadata updated for v1.3
+## Usage (WebUI)
+- Flash Net Switch Module
+- Reboot
+- Open Net Switch WebUI
+- Select apps you wish to isolate. Changes are applied immediately, no need to reboot.
+- (v1.3) Create and apply **profiles** to quickly switch isolation states.
+- (v1.3) Backup and restore your profiles.
 
-These changes introduce profile support, backup manager and a more modern, responsive UI.
-
----
-
-## How to Use (WebUI)
-
-1. Flash the Net Switch module and reboot your device.
-2. Open the WebUI (e.g., via KsuWebUI or MMRL if using Magisk).
-3. Use the search bar to find apps.
-4. Create a profile to save the current isolation state. You can select and apply profiles later.
-5. Toggle each app to isolate it (an iptables rule is applied for the app’s UID).
-
-___
-
-## Terminal Usage (Commands Provided by the Module)
-
-Open a terminal with root permissions (adb shell or Termux with root) and use:
-
+## Terminal Usage
+Open Termux or any terminal with root access and run:
 ```bash
-netswitch block <package>      # isolate (block) the package
-netswitch unblock <package>    # remove isolation from the package
-netswitch list                 # list currently isolated packages
-netswitch unblock all          # remove isolation from all packages
-```
+netswitch block <package>      # block packages
+netswitch unblock <package>    # unblock packages
+netswitch list                 # show currently blocked packages
+netswitch unblock all          # unblock all restricted packages
+````
 
+Terminal Screenshot
 ![Net-switch Terminal Example](./terminal.webp)
 
----
+## Changelog
 
-## Changelog Summary (Recent Changes)
+* **v1.3** — Added profiles system, backup manager, and revamped WebUI
 
-* **v1.3** — Profiles system, WebUI overhaul, UX improvements, Backup manager
+## Links
 
----
+* Download [here](https://github.com/Rem01Gaming/net-switch/releases)
+* [Telegram Channel](https://t.me/rem01schannel)
 
-## Contribute
+## Help and Support
 
-* Report bugs and request features at: [https://github.com/Rem01Gaming/net-switch/issues](https://github.com/Rem01Gaming/net-switch/issues)
-* PRs welcome: [https://github.com/Rem01Gaming/net-switch/pulls](https://github.com/Rem01Gaming/net-switch/pulls)
-* UX/UI: [Antonio Riccio](https://github.com/Antonio-Riccio)
+Report [here](https://github.com/Rem01Gaming/net-switch/issues) if you encounter any issues.
 
----
-
-## Useful Links
-
-* Releases: [https://github.com/Rem01Gaming/net-switch/releases](https://github.com/Rem01Gaming/net-switch/releases)
-* Telegram: [https://t.me/rem01schannel](https://t.me/rem01schannel)
-
----
+[Pull requests](https://github.com/Rem01Gaming/net-switch/pulls) are always welcome.
+UX/UI: [Antonio Riccio](https://github.com/Antonio-Riccio)
