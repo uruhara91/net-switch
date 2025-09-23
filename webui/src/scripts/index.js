@@ -12,6 +12,7 @@ const defaultConfigPath = "/data/adb/.config/net-switch/default.json";
 let profiles = {};
 let currentProfile = "";
 let installedPackages = new Set();
+let isolateList = [];
 
 async function run(cmd) {
   const { errno, stdout, stderr } = await exec(cmd);
@@ -22,7 +23,29 @@ async function run(cmd) {
   return stdout;
 }
 
-// Default config read/write helpers (store json with { lang, currentProfile })
+async function getUidForPackage(pkg) {
+  if (!pkg) return null;
+
+  const candidates = [
+    `grep "^${pkg}" /data/system/packages.list | awk '{print $2; exit}'`,
+    `dumpsys package '${pkg}' | sed -n 's/.*userId=\\([0-9][0-9]*\\).*/\\1/p' | head -1`,
+    `dumpsys package '${pkg}' | grep -Eo 'userId=[0-9]+' | head -1 | cut -d= -f2`,
+    `pm dump '${pkg}' | sed -n 's/.*userId=\\([0-9][0-9]*\\).*/\\1/p' | head -1`,
+  ];
+
+  for (const cmd of candidates) {
+    try {
+      const out = await run(cmd);
+      if (!out) continue;
+      const trimmed = out.toString().trim();
+      const m = trimmed.match(/(\d+)/);
+      if (m && m[1]) return m[1];
+    } catch (e) {}
+  }
+
+  return null;
+}
+
 async function readDefaultConfig() {
   try {
     const out = await run(`cat ${defaultConfigPath} 2>/dev/null || true`);
@@ -30,7 +53,6 @@ async function readDefaultConfig() {
     try {
       return JSON.parse(out.toString());
     } catch (e) {
-      // legacy plain text: assume it's just the lang
       return { lang: out.toString().trim() };
     }
   } catch (e) {
@@ -41,9 +63,7 @@ async function readDefaultConfig() {
 async function writeDefaultConfig(cfg) {
   try {
     await run(`echo '${JSON.stringify(cfg)}' > ${defaultConfigPath}`);
-  } catch (e) {
-    // ignore write errors
-  }
+  } catch (e) {}
 }
 
 async function persistDefaultKey(key, value) {
@@ -51,16 +71,19 @@ async function persistDefaultKey(key, value) {
     const cfg = await readDefaultConfig();
     cfg[key] = value;
     await writeDefaultConfig(cfg);
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
 }
 
 async function loadPersistedProfile() {
   try {
     const cfg = await readDefaultConfig();
-    if (cfg.currentProfile) {
-      currentProfile = cfg.currentProfile;
+    if (cfg.currentProfile && profiles[cfg.currentProfile]) {
+      await loadProfile(cfg.currentProfile);
+
+      const profileSelect = document.getElementById("profile-select");
+      if (profileSelect) {
+        profileSelect.value = cfg.currentProfile;
+      }
     }
   } catch (e) {}
 }
@@ -92,7 +115,7 @@ function updateStatus(node) {
       ? getTranslation("isolated")
       : "Isolated";
     statusEl.className =
-      "app-status text-xs text-red-600 dark:text-red-400 switch-label font-medium";
+      "app-status text-xs text-red-600 dark:text-red-400 font-medium";
     labelEl.className =
       "switch-label text-xs text-red-600 dark:text-red-400 font-medium";
   } else {
@@ -103,99 +126,272 @@ function updateStatus(node) {
       ? getTranslation("connected")
       : "Connected";
     statusEl.className =
-      "app-status text-xs text-green-600 dark:text-green-400 switch-label font-medium";
+      "app-status text-xs text-green-600 dark:text-green-400 font-medium";
     labelEl.className =
-      "switch-label text-xs text-green-600 dark:text-green-400 switch-label font-medium";
+      "switch-label text-xs text-green-600 dark:text-green-400 font-medium";
   }
 }
 
 function populateApp(name, checked) {
-  const clone = template.cloneNode(true);
-  const toggle = clone.querySelector(".ns-toggle");
-  const nameEl = clone.querySelector("p");
-  const container = clone.querySelector("div");
+  // Usa document.importNode come nella versione funzionante
+  const frag = document.importNode(template, true);
+  const el = frag.firstElementChild;
+  if (!el) return;
 
-  if (!toggle || !nameEl || !container) return;
+  const nameElement = el.querySelector("p");
+  if (nameElement) nameElement.textContent = name;
 
-  const checkboxId = safeId("app", name);
-  toggle.id = checkboxId;
-  toggle.checked = checked;
-  nameEl.textContent = name;
+  const checkbox = el.querySelector(".ns-toggle");
+  if (checkbox) checkbox.checked = checked;
 
-  // Update the status based on current state
-  updateStatus(container);
+  // Update app status indicator
+  const statusElement = el.querySelector(".app-status");
+  const switchLabel = el.querySelector(".switch-label");
 
-  // Handle toggle change
-  toggle.addEventListener("change", async (e) => {
-    e.target.disabled = true;
-    sortChecked();
+  // assign deterministic IDs
+  const statusId = safeId("ns-status", name);
+  const switchId = safeId("ns-switch", name);
+  const checkboxId = safeId("ns-toggle", name);
 
-    try {
-      const checked = e.target.checked;
-      const config = JSON.parse((await run(`cat ${configPath}`)) || "{}");
+  if (statusElement) statusElement.id = statusId;
+  if (switchLabel) switchLabel.id = switchId;
+  if (checkbox) checkbox.id = checkboxId;
 
-      if (currentProfile) {
-        if (!profiles[currentProfile]) profiles[currentProfile] = {};
-        profiles[currentProfile][name] = checked;
-      } else {
-        config[name] = checked;
+  el.dataset.statusId = statusId;
+  el.dataset.switchId = switchId;
+  el.dataset.checkboxId = checkboxId;
+
+  updateStatus(el);
+
+  if (checked) isolateList.push(name);
+
+  if (checkbox) {
+    checkbox.addEventListener("change", async () => {
+      const spinner = document.getElementById("loading-spinner");
+      if (spinner) spinner.classList.remove("hidden");
+
+      try {
+        if (checkbox.checked) {
+          if (!isolateList.includes(name)) isolateList.push(name);
+        } else {
+          const index = isolateList.indexOf(name);
+          if (index !== -1) isolateList.splice(index, 1);
+        }
+
+        const uidTrimmed = await getUidForPackage(name);
+
+        if (!uidTrimmed) {
+          throw new Error(
+            getTranslation
+              ? getTranslation("cannot_get_uid", name)
+              : `Unable to get UID for ${name}`,
+          );
+        }
+
+        if (checkbox.checked) {
+          await run(
+            `iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+          );
+          await run(
+            `ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+          );
+        } else {
+          await run(
+            `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+          );
+          await run(
+            `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+          );
+        }
+
+        updateStatus(el);
+        await saveIsolateList();
+
+        if (currentProfile && profiles[currentProfile]) {
+          profiles[currentProfile] = [...isolateList];
+          await saveProfiles();
+          updateProfileSelect();
+          await persistDefaultKey("currentProfile", currentProfile);
+        }
+
+        const message = getTranslation
+          ? getTranslation("operation_completed")
+          : "Operation completed!";
+        toast(message, "success");
+      } catch (error) {
+        checkbox.checked = !checkbox.checked;
+        updateStatus(el);
+
+        const errorMsg = getTranslation
+          ? getTranslation("operation_error")
+          : "Operation error!";
+        toast(`${errorMsg} ${error.message}`, "error");
+      } finally {
+        if (spinner) spinner.classList.add("hidden");
       }
+    });
+  }
 
-      if (currentProfile) {
-        await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
-      } else {
-        await run(`echo '${JSON.stringify(config)}' > ${configPath}`);
-      }
-
-      const uid = await run(
-        `pm list packages | grep -E "^package:${name}$" | head -1 | cut -d: -f2 | xargs -r dumpsys package | grep -E "^[ ]*userId=" | head -1 | cut -d= -f2`,
-      );
-
-      if (!uid || uid.trim() === "") {
-        throw new Error(
-          getTranslation
-            ? getTranslation("cannot_get_uid", name)
-            : `Unable to get UID for ${name}`,
-        );
-      }
-
-      const uidTrimmed = uid.trim();
-      const netdCmd = checked
-        ? `netd firewallctl setUidRule 1 ${uidTrimmed} 2`
-        : `netd firewallctl setUidRule 1 ${uidTrimmed} 0`;
-
-      const result = await run(netdCmd);
-
-      // Update status after successful operation
-      updateStatus(container);
-
-      const message = getTranslation
-        ? getTranslation("operation_completed")
-        : "Operation completed!";
-      toast(message, "success");
-    } catch (error) {
-      e.target.checked = !e.target.checked;
-      updateStatus(container);
-
-      const errorMsg = getTranslation
-        ? getTranslation("operation_error")
-        : "Operation error!";
-      toast(`${errorMsg} ${error.message}`, "error");
-    } finally {
-      e.target.disabled = false;
-    }
-  });
-
-  appsList.appendChild(container);
+  appsList.appendChild(el);
 }
 
-// Helper: encode UTF-8 string to base64 without using deprecated `unescape`
-function utf8ToBase64(str) {
-  return btoa(
-    encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function (match, p1) {
-      return String.fromCharCode(parseInt(p1, 16));
-    }),
-  );
+async function saveIsolateList() {
+  await run(`echo '${JSON.stringify(isolateList)}' > ${configPath}`);
+}
+
+async function loadProfiles() {
+  try {
+    const profilesData = await run(`cat ${profilesPath}`);
+    profiles = profilesData ? JSON.parse(profilesData) : {};
+    updateProfileSelect();
+  } catch (error) {
+    console.error("Failed to load profiles:", error);
+  }
+}
+
+async function saveProfiles() {
+  await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
+}
+
+function updateProfileSelect() {
+  const profileSelect = document.getElementById("profile-select");
+  if (!profileSelect) return;
+
+  const placeholder =
+    (getTranslation && getTranslation("select_profile")) || "Select profile";
+  profileSelect.innerHTML = `<option value="">${placeholder}</option>`;
+
+  Object.keys(profiles).forEach((profileName) => {
+    const option = document.createElement("option");
+    option.value = profileName;
+    const appCount = profiles[profileName] ? profiles[profileName].length : 0;
+    option.textContent = `${profileName} (${appCount})`;
+    if (profileName === currentProfile) {
+      option.selected = true;
+    }
+    profileSelect.appendChild(option);
+  });
+}
+
+async function loadProfile(profileName) {
+  if (!profiles[profileName]) {
+    const errorMsg = getTranslation
+      ? getTranslation("profile_not_found", profileName)
+      : `Profile "${profileName}" not found`;
+    toast(errorMsg, "error");
+    return;
+  }
+
+  const spinner = document.getElementById("loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
+
+  try {
+    await clearAllIsolation();
+    isolateList.length = 0;
+
+    const profileApps = profiles[profileName];
+    for (const app of profileApps) {
+      if (installedPackages.has(app)) {
+        isolateList.push(app);
+
+        const uidTrimmed = await getUidForPackage(app);
+        if (uidTrimmed) {
+          await run(
+            `iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+          );
+          await run(
+            `ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+          );
+        }
+      }
+    }
+
+    [...appsList.children].forEach((node) => {
+      const appName = node.querySelector("p").textContent;
+      const checkbox = node.querySelector(".ns-toggle");
+      if (!checkbox) return;
+      checkbox.checked = isolateList.includes(appName);
+      updateStatus(node);
+    });
+
+    currentProfile = profileName;
+    await saveIsolateList();
+    sortChecked();
+    await persistDefaultKey("currentProfile", currentProfile);
+
+    const successMsg = getTranslation
+      ? getTranslation("profile_activated", profileName, profileApps.length)
+      : `✅ Profile "${profileName}" activated • ${profileApps.length} apps isolated`;
+    toast(successMsg, "success");
+  } catch (error) {
+    const errorMsg = getTranslation
+      ? getTranslation("operation_error")
+      : "Operation error!";
+    toast(`${errorMsg} ${error.message}`, "error");
+  } finally {
+    if (spinner) spinner.classList.add("hidden");
+  }
+}
+
+async function saveCurrentProfile(profileName) {
+  profiles[profileName] = [...isolateList];
+  await saveProfiles();
+  currentProfile = profileName;
+  updateProfileSelect();
+  await persistDefaultKey("currentProfile", currentProfile);
+
+  const successMsg = getTranslation
+    ? getTranslation("profile_created", profileName, isolateList.length)
+    : `🎉 Profile "${profileName}" created • ${isolateList.length} apps configured`;
+  toast(successMsg, "success");
+}
+
+async function deleteProfile(profileName) {
+  if (!profileName) {
+    const errorMsg = getTranslation
+      ? getTranslation("invalid_profile_name")
+      : "Invalid profile name";
+    toast(errorMsg, "error");
+    return false;
+  }
+
+  try {
+    delete profiles[profileName];
+    await saveProfiles();
+
+    if (currentProfile === profileName) {
+      currentProfile = "";
+      await persistDefaultKey("currentProfile", "");
+    }
+
+    updateProfileSelect();
+
+    const successMsg = getTranslation
+      ? getTranslation("profile_deleted", profileName)
+      : `🗑️ Profile "${profileName}" deleted`;
+    toast(successMsg, "success");
+    return true;
+  } catch (error) {
+    const errorMsg = getTranslation
+      ? getTranslation("operation_error")
+      : "Operation error!";
+    toast(`${errorMsg} ${error.message}`, "error");
+    return false;
+  }
+}
+
+async function clearAllIsolation() {
+  for (const app of isolateList) {
+    const uidTrimmed = await getUidForPackage(app);
+    if (uidTrimmed) {
+      await run(
+        `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+      );
+      await run(
+        `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+      );
+    }
+  }
 }
 
 async function loadApps() {
@@ -207,22 +403,27 @@ async function loadApps() {
     if (!packages) return;
 
     installedPackages = new Set(packages.split("\n").filter(Boolean));
-    const config = JSON.parse((await run(`cat ${configPath}`)) || "{}");
 
-    // Clear existing apps
-    appsList.innerHTML = "";
+    const isolatedListOut = await run(`cat ${configPath}`);
+    let isolated = isolatedListOut ? JSON.parse(isolatedListOut) : [];
 
-    // Get current profile config if one is selected
-    let profileConfig = {};
-    if (currentProfile && profiles[currentProfile]) {
-      profileConfig = profiles[currentProfile];
+    const updatedIsolatedList = isolated.filter((app) =>
+      installedPackages.has(app),
+    );
+    if (isolated.length !== updatedIsolatedList.length) {
+      await run(
+        `echo '${JSON.stringify(updatedIsolatedList)}' > ${configPath}`,
+      );
+      isolated = updatedIsolatedList;
     }
 
-    // Populate apps
+    isolateList.length = 0;
+    isolateList.push(...isolated);
+
+    appsList.innerHTML = "";
+
     for (const pkg of installedPackages) {
-      const isIsolated = currentProfile
-        ? profileConfig[pkg] || false
-        : config[pkg] || false;
+      const isIsolated = isolated.includes(pkg);
       populateApp(pkg, isIsolated);
     }
 
@@ -234,80 +435,6 @@ async function loadApps() {
     toast(`${errorMsg} ${error.message}`, "error");
   } finally {
     if (spinner) spinner.classList.add("hidden");
-  }
-}
-
-async function loadProfiles() {
-  try {
-    const profilesData = await run(`cat ${profilesPath}`);
-    profiles = profilesData ? JSON.parse(profilesData) : {};
-
-    const profileSelect = document.getElementById("profile-select");
-    if (!profileSelect) return;
-
-    // Clear existing options except the placeholder
-    const placeholder = profileSelect.querySelector('option[value=""]');
-    profileSelect.innerHTML = "";
-    if (placeholder) profileSelect.appendChild(placeholder);
-
-    // Add profile options
-    Object.keys(profiles).forEach((profileName) => {
-      const option = document.createElement("option");
-      option.value = profileName;
-      option.textContent = profileName;
-      profileSelect.appendChild(option);
-    });
-
-    // Select current profile if exists
-    if (currentProfile && profiles[currentProfile]) {
-      profileSelect.value = currentProfile;
-    }
-  } catch (error) {
-    console.error("Failed to load profiles:", error);
-  }
-}
-
-async function activateProfile(profileName) {
-  if (!profiles[profileName]) {
-    const errorMsg = getTranslation
-      ? getTranslation("profile_not_found", profileName)
-      : `Profile "${profileName}" not found`;
-    toast(errorMsg, "error");
-    return;
-  }
-
-  try {
-    const profileConfig = profiles[profileName];
-    const config = {};
-    let isolatedCount = 0;
-
-    // Apply profile configuration
-    for (const [pkg, isolated] of Object.entries(profileConfig)) {
-      if (installedPackages.has(pkg)) {
-        config[pkg] = isolated;
-        if (isolated) isolatedCount++;
-      }
-    }
-
-    // Save configuration
-    await run(`echo '${JSON.stringify(config)}' > ${configPath}`);
-
-    // Set current profile
-    currentProfile = profileName;
-    await persistDefaultKey("currentProfile", currentProfile);
-
-    // Reload apps to reflect new configuration
-    await loadApps();
-
-    const successMsg = getTranslation
-      ? getTranslation("profile_activated", profileName, isolatedCount)
-      : `✅ Profile "${profileName}" activated • ${isolatedCount} apps isolated`;
-    toast(successMsg, "success");
-  } catch (error) {
-    const errorMsg = getTranslation
-      ? getTranslation("operation_error")
-      : "Operation error!";
-    toast(`${errorMsg} ${error.message}`, "error");
   }
 }
 
@@ -323,14 +450,6 @@ async function createProfile() {
     return;
   }
 
-  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
-    const errorMsg = getTranslation
-      ? getTranslation("invalid_profile_name")
-      : "Invalid profile name";
-    toast(errorMsg, "error");
-    return;
-  }
-
   if (profiles[name]) {
     const errorMsg = getTranslation
       ? getTranslation("profile_exists")
@@ -339,106 +458,28 @@ async function createProfile() {
     return;
   }
 
-  try {
-    // Get current configuration
-    const config = JSON.parse((await run(`cat ${configPath}`)) || "{}");
-
-    // Create profile with current state
-    profiles[name] = { ...config };
-
-    // Save profiles
-    await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
-
-    // Reload profiles dropdown
-    await loadProfiles();
-
-    // Clear input
-    if (nameInput) nameInput.value = "";
-
-    const appCount = Object.keys(config).length;
-    const successMsg = getTranslation
-      ? getTranslation("profile_created", name, appCount)
-      : `🎉 Profile "${name}" created • ${appCount} apps configured`;
-    toast(successMsg, "success");
-  } catch (error) {
-    const errorMsg = getTranslation
-      ? getTranslation("operation_error")
-      : "Operation error!";
-    toast(`${errorMsg} ${error.message}`, "error");
-  }
-}
-
-async function deleteProfile() {
-  const profileSelect = document.getElementById("profile-select");
-  const selectedProfile = profileSelect?.value || currentProfile;
-
-  if (!selectedProfile) {
-    const errorMsg = getTranslation
-      ? getTranslation("select_profile_to_delete")
-      : "⚠️ Select a profile to delete";
-    toast(errorMsg, "error");
-    return;
-  }
-
-  if (!profiles[selectedProfile]) {
-    const errorMsg = getTranslation
-      ? getTranslation("profile_not_found", selectedProfile)
-      : `Profile "${selectedProfile}" not found`;
-    toast(errorMsg, "error");
-    return;
-  }
-
-  try {
-    delete profiles[selectedProfile];
-    await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
-
-    // Clear current profile if it was deleted
-    if (currentProfile === selectedProfile) {
-      currentProfile = "";
-      await persistDefaultKey("currentProfile", "");
-    }
-
-    // Reload profiles and apps
-    await loadProfiles();
-    await loadApps();
-
-    const successMsg = getTranslation
-      ? getTranslation("profile_deleted", selectedProfile)
-      : `🗑️ Profile "${selectedProfile}" deleted`;
-    toast(successMsg, "success");
-  } catch (error) {
-    const errorMsg = getTranslation
-      ? getTranslation("operation_error")
-      : "Operation error!";
-    toast(`${errorMsg} ${error.message}`, "error");
-  }
+  await saveCurrentProfile(name);
+  if (nameInput) nameInput.value = "";
 }
 
 async function connectAllApps() {
+  const spinner = document.getElementById("loading-spinner");
+  if (spinner) spinner.classList.remove("hidden");
+
   try {
-    const config = {};
-
-    // Clear all isolations
-    for (const pkg of installedPackages) {
-      config[pkg] = false;
-      const uid = await run(
-        `pm list packages | grep -E "^package:${pkg}$" | head -1 | cut -d: -f2 | xargs -r dumpsys package | grep -E "^[ ]*userId=" | head -1 | cut -d= -f2`,
-      );
-      if (uid && uid.trim()) {
-        await run(`netd firewallctl setUidRule 1 ${uid.trim()} 0`);
-      }
-    }
-
-    // Save configuration
-    await run(`echo '${JSON.stringify(config)}' > ${configPath}`);
-
-    // Clear current profile
+    await clearAllIsolation();
+    isolateList.length = 0;
+    await saveIsolateList();
     currentProfile = "";
     await persistDefaultKey("currentProfile", "");
 
-    // Reload apps and profiles
-    await loadProfiles();
-    await loadApps();
+    [...appsList.children].forEach((node) => {
+      const checkbox = node.querySelector(".ns-toggle");
+      if (checkbox) checkbox.checked = false;
+      updateStatus(node);
+    });
+
+    sortChecked();
 
     const successMsg = getTranslation
       ? getTranslation("all_apps_connected")
@@ -449,10 +490,11 @@ async function connectAllApps() {
       ? getTranslation("operation_error")
       : "Operation error!";
     toast(`${errorMsg} ${error.message}`, "error");
+  } finally {
+    if (spinner) spinner.classList.add("hidden");
   }
 }
 
-// Search functionality
 function setupSearch() {
   const searchInput = document.getElementById("search");
   if (!searchInput) return;
@@ -467,7 +509,6 @@ function setupSearch() {
   });
 }
 
-// Import/Export functionality
 function setupImportExport() {
   const openIoBtn = document.getElementById("open-io-page");
   const ioBackBtn = document.getElementById("io-back-btn");
@@ -514,18 +555,20 @@ function setupImportExport() {
 
     try {
       if (mode === "export") {
-        const data = utf8ToBase64(JSON.stringify(profiles, null, 2));
-        await run(`echo '${data}' | base64 -d > '${path}'`);
+        await run(`cp ${profilesPath} '${path}'`);
+        await run(`chmod 644 '${path}' || true`);
         const successMsg = getTranslation
           ? getTranslation("export_success")
           : "Profiles exported successfully";
         toast(successMsg, "success");
       } else {
-        const data = await run(`cat '${path}'`);
-        const importedProfiles = JSON.parse(data);
-        profiles = { ...profiles, ...importedProfiles };
-        await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
+        await run(
+          `if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`,
+        );
+        await run(`cp '${path}' ${profilesPath}`);
+        await run(`chmod 644 ${profilesPath} || true`);
         await loadProfiles();
+        updateProfileSelect();
         const successMsg = getTranslation
           ? getTranslation("import_success")
           : "Profiles imported successfully";
@@ -572,32 +615,42 @@ function updateIoTexts() {
 
 // Event listeners
 document.addEventListener("DOMContentLoaded", async () => {
-  // Load persisted profile
-  await loadPersistedProfile();
-
-  // Load profiles and apps
   await loadProfiles();
+  await loadPersistedProfile();
   await loadApps();
 
-  // Setup event listeners
   setupSearch();
   setupImportExport();
 
-  // Profile management
   const profileSelect = document.getElementById("profile-select");
   const createProfileBtn = document.getElementById("create-profile");
   const deleteProfileBtn = document.getElementById("delete-profile");
 
   profileSelect?.addEventListener("change", (e) => {
     if (e.target.value) {
-      activateProfile(e.target.value);
+      loadProfile(e.target.value);
+    } else {
+      connectAllApps();
     }
   });
 
   createProfileBtn?.addEventListener("click", createProfile);
-  deleteProfileBtn?.addEventListener("click", deleteProfile);
+  deleteProfileBtn?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const selectedProfile = document.getElementById("profile-select").value;
+    const profileToDelete = selectedProfile || currentProfile;
 
-  // Set button text with translation
+    if (!profileToDelete) {
+      const errorMsg = getTranslation
+        ? getTranslation("select_profile_to_delete")
+        : "⚠️ Select a profile to delete";
+      toast(errorMsg, "error");
+      return;
+    }
+
+    await deleteProfile(profileToDelete);
+  });
+
   const openIoBtn = document.getElementById("open-io-page");
   if (openIoBtn) {
     openIoBtn.textContent = getTranslation
