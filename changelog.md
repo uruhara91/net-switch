@@ -3,6 +3,7 @@
 - **NEW**: Added Profiles System for app isolation management
 - **IMPROVED**: Enhanced UI with profile management controls
 - **IMPROVED**: Better user feedback with status indicators
+- **NEW**: Added profile backup system
 
 ## 1.2
 
