@@ -18,6 +18,7 @@ async function run(cmd) {
   const { errno, stdout, stderr } = await exec(cmd);
   if (errno !== 0) {
     toast(`stderr: ${stderr}`);
+
     return undefined;
   }
   return stdout;
@@ -40,7 +41,7 @@ async function getUidForPackage(pkg) {
       const trimmed = out.toString().trim();
       const m = trimmed.match(/(\d+)/);
       if (m && m[1]) return m[1];
-    } catch (e) {}
+    } catch (e) { }
   }
 
   return null;
@@ -63,7 +64,7 @@ async function readDefaultConfig() {
 async function writeDefaultConfig(cfg) {
   try {
     await run(`echo '${JSON.stringify(cfg)}' > ${defaultConfigPath}`);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function persistDefaultKey(key, value) {
@@ -71,7 +72,7 @@ async function persistDefaultKey(key, value) {
     const cfg = await readDefaultConfig();
     cfg[key] = value;
     await writeDefaultConfig(cfg);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function loadPersistedProfile() {
@@ -85,7 +86,7 @@ async function loadPersistedProfile() {
         profileSelect.value = cfg.currentProfile;
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function sortChecked() {
@@ -133,7 +134,6 @@ function updateStatus(node) {
 }
 
 function populateApp(name, checked) {
-  // Usa document.importNode come nella versione funzionante
   const frag = document.importNode(template, true);
   const el = frag.firstElementChild;
   if (!el) return;
@@ -190,17 +190,17 @@ function populateApp(name, checked) {
 
         if (checkbox.checked) {
           await run(
-            `iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+            `iptables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
           );
           await run(
-            `ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+            `ip6tables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
           );
         } else {
           await run(
-            `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+            `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
           );
           await run(
-            `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+            `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
           );
         }
 
@@ -213,6 +213,8 @@ function populateApp(name, checked) {
           updateProfileSelect();
           await persistDefaultKey("currentProfile", currentProfile);
         }
+
+        sortChecked();
 
         const message = getTranslation
           ? getTranslation("operation_completed")
@@ -262,7 +264,7 @@ function updateProfileSelect() {
   const placeholderOption = document.createElement("option");
   placeholderOption.value = "";
   placeholderOption.setAttribute("data-i18n", "select_profile");
- 
+
   placeholderOption.textContent =
     (typeof getTranslation === "function" && getTranslation("select_profile")) ||
     "Select profile";
@@ -304,10 +306,10 @@ async function loadProfile(profileName) {
         const uidTrimmed = await getUidForPackage(app);
         if (uidTrimmed) {
           await run(
-            `iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+            `iptables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
           );
           await run(
-            `ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+            `ip6tables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
           );
         }
       }
@@ -317,13 +319,16 @@ async function loadProfile(profileName) {
       const appName = node.querySelector("p").textContent;
       const checkbox = node.querySelector(".ns-toggle");
       if (!checkbox) return;
+
       checkbox.checked = isolateList.includes(appName);
       updateStatus(node);
     });
 
     currentProfile = profileName;
     await saveIsolateList();
+
     sortChecked();
+
     await persistDefaultKey("currentProfile", currentProfile);
 
     const successMsg = getTranslation
@@ -392,10 +397,10 @@ async function clearAllIsolation() {
     const uidTrimmed = await getUidForPackage(app);
     if (uidTrimmed) {
       await run(
-        `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+        `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
       );
       await run(
-        `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
+        `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
       );
     }
   }
@@ -562,7 +567,15 @@ function setupImportExport() {
 
     try {
       if (mode === "export") {
-        await run(`cp ${profilesPath} '${path}'`);
+        const exportResult = await exec(`cp ${profilesPath} '${path}'`);
+        if (exportResult.errno !== 0) {
+          const errorMsg = getTranslation
+            ? getTranslation("export_failed")
+            : "Export failed";
+          toast(`${errorMsg}: ${exportResult.stderr}`, "error");
+          return;
+        }
+        
         await run(`chmod 644 '${path}' || true`);
         const successMsg = getTranslation
           ? getTranslation("export_success")
@@ -572,7 +585,16 @@ function setupImportExport() {
         await run(
           `if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`,
         );
-        await run(`cp '${path}' ${profilesPath}`);
+        
+        const importResult = await exec(`cp '${path}' ${profilesPath}`);
+        if (importResult.errno !== 0) {
+          const errorMsg = getTranslation
+            ? getTranslation("import_failed")
+            : "Import failed";
+          toast(`${errorMsg}: ${importResult.stderr}`, "error");
+          return;
+        }
+        
         await run(`chmod 644 ${profilesPath} || true`);
         await loadProfiles();
         updateProfileSelect();
@@ -620,12 +642,10 @@ function updateIoTexts() {
   actionBtn.textContent = getTranslation ? getTranslation("run") : "Run";
 }
 
-// Event listeners
 document.addEventListener("DOMContentLoaded", async () => {
   await loadProfiles();
-  await loadPersistedProfile();
   await loadApps();
-
+  await loadPersistedProfile();
   setupSearch();
   setupImportExport();
 
