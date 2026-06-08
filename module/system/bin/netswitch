@@ -91,7 +91,11 @@ unblock_package() {
 
 unblock_all() {
 	for package in $(read_json); do
-		unblock_package "$package"
+		uid="$(get_uid "$package")"
+		if [ $? -eq 0 ] && [ -n "$uid" ]; then
+			iptables -D OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+			ip6tables -D OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+		fi
 	done
 	write_json
 	echo "Unblocked all packages"
@@ -121,9 +125,37 @@ handle_block() {
 		exit 1
 	fi
 
+	current_packages="$(read_json)"
+	new_packages="$current_packages"
+
 	for package in "$@"; do
-		block_package "$package"
+		uid="$(get_uid "$package")"
+		if [ $? -ne 0 ] || [ -z "$uid" ]; then
+			echo "Error: Package '$package' not found"
+			continue
+		fi
+
+		iptables -C OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null || \
+			iptables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
+		ip6tables -C OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null || \
+			ip6tables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
+
+		is_blocked=0
+		for app in $new_packages; do
+			if [ "$app" = "$package" ]; then
+				is_blocked=1
+				break
+			fi
+		done
+
+		if [ $is_blocked -eq 0 ]; then
+			new_packages="$new_packages $package"
+		fi
+		
+		echo "Blocked internet access for $package (UID: $uid)"
 	done
+	
+	write_json $new_packages
 }
 
 handle_unblock() {
@@ -137,9 +169,35 @@ handle_unblock() {
 		exit 0
 	fi
 
+	current_packages="$(read_json)"
+	new_packages=""
+
 	for package in "$@"; do
-		unblock_package "$package"
+		uid="$(get_uid "$package")"
+		if [ $? -ne 0 ] || [ -z "$uid" ]; then
+			echo "Error: Package '$package' not found"
+			continue
+		fi
+
+		iptables -D OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+		ip6tables -D OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+		echo "Unblocked internet access for $package (UID: $uid)"
 	done
+
+	for app in $current_packages; do
+		keep=1
+		for pkg in "$@"; do
+			if [ "$app" = "$pkg" ]; then
+				keep=0
+				break
+			fi
+		done
+		if [ $keep -eq 1 ]; then
+			new_packages="$new_packages $app"
+		fi
+	done
+
+	write_json $new_packages
 }
 
 case "$1" in
