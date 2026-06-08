@@ -590,16 +590,11 @@ function setupImportExport() {
   const ioModeSelect = document.getElementById("io-mode-select");
   const homePage = document.getElementById("home-page");
   const ioPage = document.getElementById("io-page");
+  const pathContainer = document.getElementById("io-path-container");
+  const fileContainer = document.getElementById("io-file-container");
+  const filePicker = document.getElementById("io-file-picker");
 
-  if (
-    !openIoBtn ||
-    !ioBackBtn ||
-    !ioActionBtn ||
-    !ioModeSelect ||
-    !homePage ||
-    !ioPage
-  )
-    return;
+  if (!openIoBtn || !ioBackBtn || !ioActionBtn || !ioModeSelect || !homePage || !ioPage) return;
 
   openIoBtn.addEventListener("click", () => {
     homePage.classList.add("hidden");
@@ -612,69 +607,101 @@ function setupImportExport() {
     homePage.classList.remove("hidden");
   });
 
-  ioModeSelect.addEventListener("change", updateIoTexts);
+  ioModeSelect.addEventListener("change", () => {
+    updateIoTexts();
+    if (ioModeSelect.value === "export") {
+      pathContainer?.classList.remove("hidden");
+      fileContainer?.classList.add("hidden");
+    } else {
+      pathContainer?.classList.add("hidden");
+      fileContainer?.classList.remove("hidden");
+    }
+  });
 
   ioActionBtn.addEventListener("click", async () => {
     const mode = ioModeSelect.value;
-    const pathInput = document.getElementById("io-path-input");
-    const path = pathInput?.value?.trim();
-
-    if (!path) {
-      const errorMsg = getTranslation
-        ? getTranslation("invalid_path")
-        : "Invalid path";
-      toast(errorMsg, "error");
-      return;
-    }
+    const spinner = document.getElementById("loading-spinner");
 
     try {
       if (mode === "export") {
+        const pathInput = document.getElementById("io-path-input");
+        // Jika kosong, gunakan default path
+        const path = pathInput?.value?.trim() || "/sdcard/Download/net-switch-profiles.json";
+
+        if (spinner) spinner.classList.remove("hidden");
         const exportResult = await exec(`cp ${profilesPath} '${path}'`);
+        
         if (exportResult.errno !== 0) {
-          const errorMsg = getTranslation
-            ? getTranslation("export_failed")
-            : "Export failed";
+          if (spinner) spinner.classList.add("hidden");
+          const errorMsg = getTranslation ? getTranslation("export_failed") : "Export failed";
           toast(`${errorMsg}: ${exportResult.stderr}`, "error");
           return;
         }
-        
+
         await run(`chmod 644 '${path}' || true`);
-        const successMsg = getTranslation
-          ? getTranslation("export_success")
-          : "Profiles exported successfully";
-        toast(successMsg, "success");
-      } else {
-        await run(
-          `if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`,
-        );
+        if (spinner) spinner.classList.add("hidden");
         
-        const importResult = await exec(`cp '${path}' ${profilesPath}`);
-        if (importResult.errno !== 0) {
-          const errorMsg = getTranslation
-            ? getTranslation("import_failed")
-            : "Import failed";
-          toast(`${errorMsg}: ${importResult.stderr}`, "error");
+        const successMsg = getTranslation ? getTranslation("export_success") : "Profiles exported successfully";
+        toast(`${successMsg} -> ${path}`, "success");
+
+      } else {
+        if (!filePicker.files || filePicker.files.length === 0) {
+          const errorMsg = getTranslation ? getTranslation("invalid_path") : "Please select a file first";
+          toast(errorMsg, "error");
           return;
         }
-        
-        await run(`chmod 644 ${profilesPath} || true`);
-        await loadProfiles();
-        updateProfileSelect();
-        const successMsg = getTranslation
-          ? getTranslation("import_success")
-          : "Profiles imported successfully";
-        toast(successMsg, "success");
+
+        const file = filePicker.files[0];
+        const reader = new FileReader();
+
+        reader.onload = async (e) => {
+          try {
+            if (spinner) spinner.classList.remove("hidden");
+            const content = e.target.result;
+
+            JSON.parse(content);
+
+            await run(`if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`);
+
+            const writeCmd = `cat << 'EOF' > ${profilesPath}\n${content}\nEOF`;
+            const writeResult = await exec(writeCmd);
+
+            if (writeResult.errno !== 0) {
+              throw new Error(writeResult.stderr);
+            }
+
+            await run(`chmod 644 ${profilesPath} || true`);
+            await loadProfiles();
+            updateProfileSelect();
+
+            if (spinner) spinner.classList.add("hidden");
+            const successMsg = getTranslation ? getTranslation("import_success") : "Profiles imported successfully";
+            toast(successMsg, "success");
+
+            filePicker.value = "";
+          } catch (err) {
+            if (spinner) spinner.classList.add("hidden");
+            const errorMsg = getTranslation ? getTranslation("import_failed") : "Import failed";
+            toast(`${errorMsg}: Invalid JSON file`, "error");
+            filePicker.value = "";
+          }
+        };
+        reader.readAsText(file);
       }
     } catch (error) {
+      if (spinner) spinner.classList.add("hidden");
       const isExport = mode === "export";
-      const errorMsg = getTranslation
-        ? getTranslation(isExport ? "export_failed" : "import_failed")
-        : isExport
-          ? "Export failed"
-          : "Import failed";
+      const errorMsg = getTranslation ? getTranslation(isExport ? "export_failed" : "import_failed") : (isExport ? "Export failed" : "Import failed");
       toast(`${errorMsg}: ${error.message}`, "error");
     }
   });
+}
+
+function updateIoTexts() {
+  const mode = document.getElementById("io-mode-select")?.value;
+  const actionBtn = document.getElementById("io-action-btn");
+  if (!mode || !actionBtn) return;
+  actionBtn.textContent = getTranslation ? getTranslation("run") : "Run";
 }
 
 function updateIoTexts() {

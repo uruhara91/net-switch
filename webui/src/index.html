@@ -251,13 +251,32 @@
                 </div>
 
                 <div>
-                    <label for="io-path-input" data-i18n="destination_path"
-                        class="block text-sm text-gray-600 dark:text-gray-300">Percorso</label>
-                    <input id="io-path-input" type="text" placeholder="/sdcard/Download/profiles.json"
-                        class="mt-1 w-full rounded-lg border border-gray-300 py-2 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" />
-                    <p data-i18n="export_desc" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                        Inserisci il percorso di destinazione per l'export o
-                        il percorso sorgente per l'import.
+                    <label for="io-mode-select" data-i18n="mode_label" class="block text-sm text-gray-600 dark:text-gray-300">Modalità</label>
+                    <select id="io-mode-select" class="mt-1 w-full rounded-lg border border-gray-300 py-2 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200">
+                        <option data-i18n="export_option" value="export">Export</option>
+                        <option data-i18n="import_option" value="import">Import</option>
+                    </select>
+                </div>
+
+                <div id="io-path-container">
+                    <label id="io-path-label" for="io-path-input" data-i18n="destination_path" class="block text-sm text-gray-600 dark:text-gray-300">Percorso</label>
+                    <input id="io-path-input" type="text" value="/sdcard/Download/net-switch-profiles.json" placeholder="/sdcard/Download/profiles.json" class="mt-1 w-full rounded-lg border border-gray-300 py-2 px-3 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200" />
+                    <p id="io-desc" data-i18n="export_desc" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Inserisci il percorso di destinazione per l'export.
+                    </p>
+                </div>
+
+                <div id="io-file-container" class="hidden">
+                    <label data-i18n="source_path" class="block text-sm text-gray-600 dark:text-gray-300">File Backup (.json)</label>
+                    <input type="file" id="io-file-picker" accept=".json" class="mt-1 block w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100
+                        dark:file:bg-gray-700 dark:file:text-blue-400" />
+                    <p data-i18n="import_desc" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Pilih file konfigurasi dari penyimpanan.
                     </p>
                 </div>
 
