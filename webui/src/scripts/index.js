@@ -641,33 +641,6 @@ function updateIoTexts() {
   actionBtn.textContent = getTranslation ? getTranslation("run") : "Run";
 }
 
-function updateIoTexts() {
-  const mode = document.getElementById("io-mode-select")?.value;
-  const pathLabel = document.getElementById("io-path-label");
-  const pathDesc = document.getElementById("io-desc");
-  const actionBtn = document.getElementById("io-action-btn");
-
-  if (!mode || !pathLabel || !pathDesc || !actionBtn) return;
-
-  if (mode === "export") {
-    pathLabel.textContent = getTranslation
-      ? getTranslation("destination_path")
-      : "Destination path";
-    pathDesc.textContent = getTranslation
-      ? getTranslation("export_desc")
-      : "Enter destination path for export";
-  } else {
-    pathLabel.textContent = getTranslation
-      ? getTranslation("source_path")
-      : "Source path";
-    pathDesc.textContent = getTranslation
-      ? getTranslation("import_desc")
-      : "Enter source path for import";
-  }
-
-  actionBtn.textContent = getTranslation ? getTranslation("run") : "Run";
-}
-
 document.addEventListener("DOMContentLoaded", async () => {
   await loadProfiles();
   await loadApps();
