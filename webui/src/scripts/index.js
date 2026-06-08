@@ -598,7 +598,7 @@ function setupImportExport() {
 
             JSON.parse(content);
 
-            await run(`if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`);
+            await run(`if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/sys_yay/old_profiles.json; fi`);
 
             const writeCmd = `cat << 'EOF' > ${profilesPath}\n${content}\nEOF`;
             const writeResult = await exec(writeCmd);
