@@ -5,9 +5,9 @@ import "@fortawesome/fontawesome-free/css/all.min.css";
 const template = document.getElementById("app-template").content;
 const appsList = document.getElementById("apps-list");
 
-const configPath = "/data/adb/sys_yay/isolated.json"; 
-const profilesPath = "/data/adb/sys_yay/profiles.json";
-const defaultConfigPath = "/data/adb/sys_yay/default.json";
+const configPath = "/data/adb/.config/sys_YAY/isolated.json"; 
+const profilesPath = "/data/adb/.config/sys_YAY/profiles.json";
+const defaultConfigPath = "/data/adb/.config/sys_YAY/default.json";
 
 let profiles = {};
 let currentProfile = "";
@@ -598,7 +598,7 @@ function setupImportExport() {
 
             JSON.parse(content);
 
-            await run(`if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/sys_yay/old_profiles.json; fi`);
+            await run(`if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/sys_YAY/old_profiles.json; fi`);
 
             const writeCmd = `cat << 'EOF' > ${profilesPath}\n${content}\nEOF`;
             const writeResult = await exec(writeCmd);

@@ -4,7 +4,7 @@ until [ "$(getprop sys.boot_completed)" = "1" ] && [ -f /data/system/packages.li
 	sleep 1
 done
 
-JSON_FILE="/data/adb/sys_yay/isolated.json"
+JSON_FILE="/data/adb/.config/sys_YAY/isolated.json"
 
 if [ -f "$JSON_FILE" ]; then
     packages="$(cat "$JSON_FILE" | tr -d '[]" ' | tr ',' ' ')"

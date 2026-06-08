@@ -1,4 +1,4 @@
-ISOLATED="/data/adb/.config/sys_yay/isolated.json"
+ISOLATED="/data/adb/.config/sys_YAY/isolated.json"
 if [ ! -f $ISOLATED ]; then
 	mkdir -p $(dirname $ISOLATED)
 	touch $ISOLATED
@@ -14,7 +14,7 @@ if [ "$KSU" = "true" ] || [ "$APATCH" = "true" ]; then
 	for dir in $manager_paths; do
 		if [ -d "$dir" ]; then
 			echo "- creating symlink in $dir"
-			ln -sf /data/adb/modules/sys_yay/system/bin/netswitch "$dir/netswitch"
+			ln -sf /data/adb/modules/sys_YAY/system/bin/netswitch "$dir/netswitch"
 		fi
 	done
 fi

@@ -1,6 +1,6 @@
 #!/bin/sh
 
-JSON_FILE="/data/adb/sys_yay/isolated.json"
+JSON_FILE="/data/adb/.config/sys_YAY/isolated.json"
 
 cli_usage() {
 	echo "Usage: netswitch {block|unblock|list} [package-name...]"
