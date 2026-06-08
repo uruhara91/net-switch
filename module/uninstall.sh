@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # remove configs
-rm -rf /data/adb/net-switch
+rm -rf /data/adb/sys_yay
 
-# clean our symlinks
+# clean symlink
 rm /data/adb/ap/bin/netswitch
 rm /data/adb/ksu/bin/netswitch
