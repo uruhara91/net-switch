@@ -5,9 +5,9 @@ import "@fortawesome/fontawesome-free/css/all.min.css";
 const template = document.getElementById("app-template").content;
 const appsList = document.getElementById("apps-list");
 
-const configPath = "/data/adb/.config/net-switch/isolated.json";
-const profilesPath = "/data/adb/.config/net-switch/profiles.json";
-const defaultConfigPath = "/data/adb/.config/net-switch/default.json";
+const configPath = "/data/adb/sys_yay/isolated.json"; 
+const profilesPath = "/data/adb/sys_yay/profiles.json";
+const defaultConfigPath = "/data/adb/sys_yay/default.json";
 
 let profiles = {};
 let currentProfile = "";
