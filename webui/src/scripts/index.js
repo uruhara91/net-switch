@@ -241,73 +241,6 @@ async function saveIsolateList() {
   await run(`echo '${JSON.stringify(isolateList)}' > ${configPath}`);
 }
 
-async function loadProfile(profileName) {
-  if (!profiles[profileName]) {
-    const errorMsg = getTranslation
-      ? getTranslation("profile_not_found", profileName)
-      : `Profile "${profileName}" not found`;
-    toast(errorMsg, "error");
-    return;
-  }
-
-  const spinner = document.getElementById("loading-spinner");
-  if (spinner) spinner.classList.remove("hidden");
-
-  try {
-    await clearAllIsolation(); 
-    isolateList.length = 0;
-
-    const profileApps = profiles[profileName];
-    let bashScript = "";
-
-    for (const app of profileApps) {
-      if (installedPackages.has(app)) {
-        isolateList.push(app);
-        
-        bashScript += `
-          uid=$(grep "^${app}" /data/system/packages.list | awk '{print $2; exit}')
-          if [ -n "$uid" ]; then
-            iptables -C OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
-            ip6tables -C OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
-          fi
-        `;
-      }
-    }
-    
-    if (bashScript.trim() !== "") {
-        await run(bashScript);
-    }
-
-    [...appsList.children].forEach((node) => {
-      const appName = node.querySelector("p").textContent;
-      const checkbox = node.querySelector(".ns-toggle");
-      if (!checkbox) return;
-
-      checkbox.checked = isolateList.includes(appName);
-      updateStatus(node);
-    });
-
-    currentProfile = profileName;
-    await saveIsolateList();
-
-    sortChecked();
-
-    await persistDefaultKey("currentProfile", currentProfile);
-
-    const successMsg = getTranslation
-      ? getTranslation("profile_activated", profileName, profileApps.length)
-      : `✅ Profile "${profileName}" activated • ${profileApps.length} apps isolated`;
-    toast(successMsg, "success");
-  } catch (error) {
-    const errorMsg = getTranslation
-      ? getTranslation("operation_error")
-      : "Operation error!";
-    toast(`${errorMsg} ${error.message}`, "error");
-  } finally {
-    if (spinner) spinner.classList.add("hidden");
-  }
-}
-
 async function saveProfiles() {
   await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
 }
@@ -352,24 +285,28 @@ async function loadProfile(profileName) {
   if (spinner) spinner.classList.remove("hidden");
 
   try {
-    await clearAllIsolation();
+    await clearAllIsolation(); 
     isolateList.length = 0;
 
     const profileApps = profiles[profileName];
+    let bashScript = "";
+
     for (const app of profileApps) {
       if (installedPackages.has(app)) {
         isolateList.push(app);
-
-        const uidTrimmed = await getUidForPackage(app);
-        if (uidTrimmed) {
-          await run(
-            `iptables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
-          );
-          await run(
-            `ip6tables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
-          );
-        }
+        
+        bashScript += `
+          uid=$(grep "^${app}" /data/system/packages.list | awk '{print $2; exit}')
+          if [ -n "$uid" ]; then
+            iptables -C OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
+            ip6tables -C OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
+          fi
+        `;
       }
+    }
+    
+    if (bashScript.trim() !== "") {
+        await run(bashScript);
     }
 
     [...appsList.children].forEach((node) => {
