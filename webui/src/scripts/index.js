@@ -241,6 +241,32 @@ async function saveIsolateList() {
   await run(`echo '${JSON.stringify(isolateList)}' > ${configPath}`);
 }
 
+async function loadProfiles() {
+  const spinner = document.getElementById("loading-spinner");
+  
+  try {
+    const exists = await run(`[ -f ${profilesPath} ] && echo "exists"`);
+    if (!exists || exists.trim() !== "exists") {
+      profiles = {};
+      return;
+    }
+
+    const data = await run(`cat ${profilesPath}`);
+    if (!data) throw new Error("Empty file");
+
+    const parsed = JSON.parse(data);
+    
+    profiles = (typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+
+  } catch (error) {
+    console.error("Gagal memuat profil, melakukan reset ke empty state:", error);
+    profiles = {};
+    toast(getTranslation("operation_error") + ": Corrupt profile data", "error");
+  } finally {
+    updateProfileSelect();
+  }
+}
+
 async function saveProfiles() {
   await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
 }
