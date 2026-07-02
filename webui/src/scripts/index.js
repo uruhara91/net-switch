@@ -8,30 +8,124 @@ const appsList = document.getElementById("apps-list");
 const configPath = "/data/adb/.config/net-switch/isolated.json";
 const profilesPath = "/data/adb/.config/net-switch/profiles.json";
 const defaultConfigPath = "/data/adb/.config/net-switch/default.json";
+const oldProfilesBackupPath = "/data/adb/.config/net-switch/old_profiles.json";
+const PKGLIST_PATH = "/data/system/packages.list";
+
+// Must match the chain name used by module/service.sh and the netswitch
+// CLI. All three rule-writers (boot service, CLI, WebUI) MUST target the
+// same chain -- otherwise each one flushes/manages a different set of
+// rules and stale REJECT rules accumulate outside of anyone's control.
+const CHAIN = "netswitch";
 
 let profiles = {};
 let currentProfile = "";
 let installedPackages = new Set();
 let isolateList = [];
 
+// pkg -> uid, built once per load from packages.list instead of spawning
+// a root shell per app (was previously up to 4 exec() calls per app)
+let uidMap = new Map();
+
+// ---------------------------------------------------------------------
+// Shell-safety helpers
+//
+// Every value that gets interpolated into a shell command run via
+// kernelsu's exec()/run() MUST go through shQuote(). Without this,
+// anything typed into the "path" field (import/export), or theoretically
+// a package/profile name, becomes arbitrary root command execution.
+// ---------------------------------------------------------------------
+
+/**
+ * POSIX single-quote escaping: wraps the string in single quotes and
+ * safely escapes any embedded single quotes. This is the standard,
+ * safe way to pass an arbitrary string as one shell argument.
+ */
+function shQuote(str) {
+  return `'${String(str).replace(/'/g, `'\\''`)}'`;
+}
+
+/** UID must be purely numeric before it's ever used in a shell command. */
+function isValidUid(uid) {
+  return typeof uid === "string" && /^\d+$/.test(uid);
+}
+
+/** Package names are restricted to the charset Android actually allows. */
+function isValidPackageName(pkg) {
+  return typeof pkg === "string" && /^[a-zA-Z0-9._]+$/.test(pkg) && pkg.length <= 255;
+}
+
+/** Profile names: keep it to sane printable characters, reasonable length. */
+function isValidProfileName(name) {
+  return typeof name === "string" && /^[\p{L}\p{N} _\-.]{1,64}$/u.test(name);
+}
+
 async function run(cmd) {
   const { errno, stdout, stderr } = await exec(cmd);
   if (errno !== 0) {
     toast(`stderr: ${stderr}`);
-
     return undefined;
   }
   return stdout;
 }
 
+// ---------------------------------------------------------------------
+// Serialized writer queue
+//
+// Prevents lost-update races when multiple UI actions (toggle app,
+// switch profile, create profile) fire in quick succession and would
+// otherwise interleave read-modify-write cycles on the same JSON files.
+// ---------------------------------------------------------------------
+let writeChain = Promise.resolve();
+function serialize(fn) {
+  const result = writeChain.then(fn, fn);
+  // swallow so one failed write doesn't permanently break the chain
+  writeChain = result.catch(() => {});
+  return result;
+}
+
+// ---------------------------------------------------------------------
+// UID resolution
+// ---------------------------------------------------------------------
+
+/**
+ * Build the full package->uid map in a single shell round-trip by reading
+ * /data/system/packages.list directly, instead of calling dumpsys/pm per
+ * package. Falls back gracefully if the file can't be read.
+ */
+async function buildUidMap() {
+  const map = new Map();
+  const raw = await run(`cat ${shQuote(PKGLIST_PATH)} 2>/dev/null`);
+  if (!raw) return map;
+
+  raw
+    .toString()
+    .split("\n")
+    .forEach((line) => {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 2 && isValidPackageName(parts[0]) && isValidUid(parts[1])) {
+        map.set(parts[0], parts[1]);
+      }
+    });
+
+  return map;
+}
+
+/**
+ * Look up a UID for a package, preferring the in-memory map (fast, no
+ * shell exec). Falls back to targeted dumpsys/pm queries only if the
+ * package is missing from packages.list (rare edge cases, e.g. certain
+ * system packages).
+ */
 async function getUidForPackage(pkg) {
-  if (!pkg) return null;
+  if (!isValidPackageName(pkg)) return null;
+
+  const cached = uidMap.get(pkg);
+  if (cached) return cached;
 
   const candidates = [
-    `grep "^${pkg}" /data/system/packages.list | awk '{print $2; exit}'`,
-    `dumpsys package '${pkg}' | sed -n 's/.*userId=\\([0-9][0-9]*\\).*/\\1/p' | head -1`,
-    `dumpsys package '${pkg}' | grep -Eo 'userId=[0-9]+' | head -1 | cut -d= -f2`,
-    `pm dump '${pkg}' | sed -n 's/.*userId=\\([0-9][0-9]*\\).*/\\1/p' | head -1`,
+    `dumpsys package ${shQuote(pkg)} | sed -n 's/.*userId=\\([0-9][0-9]*\\).*/\\1/p' | head -1`,
+    `dumpsys package ${shQuote(pkg)} | grep -Eo 'userId=[0-9]+' | head -1 | cut -d= -f2`,
+    `pm dump ${shQuote(pkg)} | sed -n 's/.*userId=\\([0-9][0-9]*\\).*/\\1/p' | head -1`,
   ];
 
   for (const cmd of candidates) {
@@ -39,17 +133,74 @@ async function getUidForPackage(pkg) {
       const out = await run(cmd);
       if (!out) continue;
       const trimmed = out.toString().trim();
-      const m = trimmed.match(/(\d+)/);
-      if (m && m[1]) return m[1];
-    } catch (e) { }
+      const m = trimmed.match(/^(\d+)$/m) || trimmed.match(/(\d+)/);
+      if (m && m[1] && isValidUid(m[1])) {
+        uidMap.set(pkg, m[1]);
+        return m[1];
+      }
+    } catch (e) {
+      /* try next candidate */
+    }
   }
 
   return null;
 }
 
+// ---------------------------------------------------------------------
+// iptables rule helpers
+//
+// All rules go into the dedicated `netswitch` chain (created + jumped
+// from OUTPUT by module/service.sh at boot, and lazily ensured here too
+// in case the WebUI is used before the first boot-time service run, or
+// iptables state was reset by something else). Never write directly to
+// OUTPUT -- that chain is shared with other firewall modules and mixing
+// rule ownership makes cleanup (uninstall, "connect all", chain flush)
+// unreliable.
+// ---------------------------------------------------------------------
+
+let chainEnsured = false;
+
+async function ensureChain() {
+  if (chainEnsured) return;
+  await run(`iptables -N ${shQuote(CHAIN)} 2>/dev/null`);
+  await run(
+    `iptables -C OUTPUT -j ${shQuote(CHAIN)} 2>/dev/null || iptables -I OUTPUT -j ${shQuote(CHAIN)}`,
+  );
+  await run(`ip6tables -N ${shQuote(CHAIN)} 2>/dev/null`);
+  await run(
+    `ip6tables -C OUTPUT -j ${shQuote(CHAIN)} 2>/dev/null || ip6tables -I OUTPUT -j ${shQuote(CHAIN)}`,
+  );
+  chainEnsured = true;
+}
+
+async function applyBlockRule(uid) {
+  if (!isValidUid(uid)) return;
+  await ensureChain();
+  await run(
+    `iptables -C ${shQuote(CHAIN)} -m owner --uid-owner ${shQuote(uid)} -j REJECT 2>/dev/null || iptables -A ${shQuote(CHAIN)} -m owner --uid-owner ${shQuote(uid)} -j REJECT`,
+  );
+  await run(
+    `ip6tables -C ${shQuote(CHAIN)} -m owner --uid-owner ${shQuote(uid)} -j REJECT 2>/dev/null || ip6tables -A ${shQuote(CHAIN)} -m owner --uid-owner ${shQuote(uid)} -j REJECT`,
+  );
+}
+
+async function removeBlockRule(uid) {
+  if (!isValidUid(uid)) return;
+  await run(
+    `iptables -D ${shQuote(CHAIN)} -m owner --uid-owner ${shQuote(uid)} -j REJECT 2>/dev/null || true`,
+  );
+  await run(
+    `ip6tables -D ${shQuote(CHAIN)} -m owner --uid-owner ${shQuote(uid)} -j REJECT 2>/dev/null || true`,
+  );
+}
+
+// ---------------------------------------------------------------------
+// Config persistence (all writes quoted + serialized)
+// ---------------------------------------------------------------------
+
 async function readDefaultConfig() {
   try {
-    const out = await run(`cat ${defaultConfigPath} 2>/dev/null || true`);
+    const out = await run(`cat ${shQuote(defaultConfigPath)} 2>/dev/null || true`);
     if (!out) return {};
     try {
       return JSON.parse(out.toString());
@@ -62,9 +213,13 @@ async function readDefaultConfig() {
 }
 
 async function writeDefaultConfig(cfg) {
-  try {
-    await run(`echo '${JSON.stringify(cfg)}' > ${defaultConfigPath}`);
-  } catch (e) { }
+  return serialize(async () => {
+    try {
+      await run(`echo ${shQuote(JSON.stringify(cfg))} > ${shQuote(defaultConfigPath)}`);
+    } catch (e) {
+      /* best-effort */
+    }
+  });
 }
 
 async function persistDefaultKey(key, value) {
@@ -72,7 +227,9 @@ async function persistDefaultKey(key, value) {
     const cfg = await readDefaultConfig();
     cfg[key] = value;
     await writeDefaultConfig(cfg);
-  } catch (e) { }
+  } catch (e) {
+    /* best-effort */
+  }
 }
 
 async function loadPersistedProfile() {
@@ -86,7 +243,9 @@ async function loadPersistedProfile() {
         profileSelect.value = cfg.currentProfile;
       }
     }
-  } catch (e) { }
+  } catch (e) {
+    /* no persisted profile, ignore */
+  }
 }
 
 function sortChecked() {
@@ -144,11 +303,9 @@ function populateApp(name, checked) {
   const checkbox = el.querySelector(".ns-toggle");
   if (checkbox) checkbox.checked = checked;
 
-  // Update app status indicator
   const statusElement = el.querySelector(".app-status");
   const switchLabel = el.querySelector(".switch-label");
 
-  // assign deterministic IDs
   const statusId = safeId("ns-status", name);
   const switchId = safeId("ns-switch", name);
   const checkboxId = safeId("ns-toggle", name);
@@ -170,7 +327,14 @@ function populateApp(name, checked) {
       const spinner = document.getElementById("loading-spinner");
       if (spinner) spinner.classList.remove("hidden");
 
+      // snapshot in case we need to roll back the toggle on error
+      const wasChecked = !checkbox.checked;
+
       try {
+        if (!isValidPackageName(name)) {
+          throw new Error("Invalid package name");
+        }
+
         if (checkbox.checked) {
           if (!isolateList.includes(name)) isolateList.push(name);
         } else {
@@ -189,19 +353,9 @@ function populateApp(name, checked) {
         }
 
         if (checkbox.checked) {
-          await run(
-            `iptables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
-          );
-          await run(
-            `ip6tables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
-          );
+          await applyBlockRule(uidTrimmed);
         } else {
-          await run(
-            `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
-          );
-          await run(
-            `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
-          );
+          await removeBlockRule(uidTrimmed);
         }
 
         updateStatus(el);
@@ -221,7 +375,14 @@ function populateApp(name, checked) {
           : "Operation completed!";
         toast(message, "success");
       } catch (error) {
-        checkbox.checked = !checkbox.checked;
+        // roll back both the checkbox UI state and isolateList membership
+        checkbox.checked = wasChecked;
+        const idx = isolateList.indexOf(name);
+        if (wasChecked && idx === -1) {
+          isolateList.push(name);
+        } else if (!wasChecked && idx !== -1) {
+          isolateList.splice(idx, 1);
+        }
         updateStatus(el);
 
         const errorMsg = getTranslation
@@ -238,13 +399,30 @@ function populateApp(name, checked) {
 }
 
 async function saveIsolateList() {
-  await run(`echo '${JSON.stringify(isolateList)}' > ${configPath}`);
+  return serialize(async () => {
+    await run(`echo ${shQuote(JSON.stringify(isolateList))} > ${shQuote(configPath)}`);
+  });
 }
 
 async function loadProfiles() {
   try {
-    const profilesData = await run(`cat ${profilesPath}`);
-    profiles = profilesData ? JSON.parse(profilesData) : {};
+    const profilesData = await run(`cat ${shQuote(profilesPath)} 2>/dev/null`);
+    let parsed = {};
+    if (profilesData) {
+      try {
+        parsed = JSON.parse(profilesData);
+      } catch (e) {
+        console.error("Corrupt profiles.json, resetting to empty:", e);
+        parsed = {};
+      }
+    }
+    // basic shape validation: object of string -> array of valid package names
+    profiles = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (isValidProfileName(key) && Array.isArray(value)) {
+        profiles[key] = value.filter((p) => isValidPackageName(p));
+      }
+    }
     updateProfileSelect();
   } catch (error) {
     console.error("Failed to load profiles:", error);
@@ -252,7 +430,9 @@ async function loadProfiles() {
 }
 
 async function saveProfiles() {
-  await run(`echo '${JSON.stringify(profiles)}' > ${profilesPath}`);
+  return serialize(async () => {
+    await run(`echo ${shQuote(JSON.stringify(profiles))} > ${shQuote(profilesPath)}`);
+  });
 }
 
 function updateProfileSelect() {
@@ -283,7 +463,7 @@ function updateProfileSelect() {
 }
 
 async function loadProfile(profileName) {
-  if (!profiles[profileName]) {
+  if (!isValidProfileName(profileName) || !profiles[profileName]) {
     const errorMsg = getTranslation
       ? getTranslation("profile_not_found", profileName)
       : `Profile "${profileName}" not found`;
@@ -300,17 +480,12 @@ async function loadProfile(profileName) {
 
     const profileApps = profiles[profileName];
     for (const app of profileApps) {
-      if (installedPackages.has(app)) {
+      if (isValidPackageName(app) && installedPackages.has(app)) {
         isolateList.push(app);
 
         const uidTrimmed = await getUidForPackage(app);
         if (uidTrimmed) {
-          await run(
-            `iptables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || iptables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
-          );
-          await run(
-            `ip6tables -C OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || ip6tables -I OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT`,
-          );
+          await applyBlockRule(uidTrimmed);
         }
       }
     }
@@ -359,7 +534,7 @@ async function saveCurrentProfile(profileName) {
 }
 
 async function deleteProfile(profileName) {
-  if (!profileName) {
+  if (!profileName || !isValidProfileName(profileName)) {
     const errorMsg = getTranslation
       ? getTranslation("invalid_profile_name")
       : "Invalid profile name";
@@ -393,15 +568,13 @@ async function deleteProfile(profileName) {
 }
 
 async function clearAllIsolation() {
+  // resolve all uids first (mostly cache hits now thanks to uidMap),
+  // then fire the delete rules; avoids re-deriving uid mid-loop
   for (const app of isolateList) {
+    if (!isValidPackageName(app)) continue;
     const uidTrimmed = await getUidForPackage(app);
     if (uidTrimmed) {
-      await run(
-        `iptables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
-      );
-      await run(
-        `ip6tables -D OUTPUT -m owner --uid-owner ${uidTrimmed} -j REJECT 2>/dev/null || true`,
-      );
+      await removeBlockRule(uidTrimmed);
     }
   }
 }
@@ -414,18 +587,34 @@ async function loadApps() {
     const packages = await run("pm list packages | cut -d: -f2 | sort");
     if (!packages) return;
 
-    installedPackages = new Set(packages.split("\n").filter(Boolean));
+    installedPackages = new Set(
+      packages
+        .split("\n")
+        .map((p) => p.trim())
+        .filter((p) => isValidPackageName(p)),
+    );
 
-    const isolatedListOut = await run(`cat ${configPath}`);
-    let isolated = isolatedListOut ? JSON.parse(isolatedListOut) : [];
+    // build uid map once instead of per-app dumpsys calls
+    uidMap = await buildUidMap();
+
+    const isolatedListOut = await run(`cat ${shQuote(configPath)} 2>/dev/null`);
+    let isolated = [];
+    if (isolatedListOut) {
+      try {
+        isolated = JSON.parse(isolatedListOut);
+        if (!Array.isArray(isolated)) isolated = [];
+      } catch (e) {
+        console.error("Corrupt isolated.json, resetting:", e);
+        isolated = [];
+      }
+    }
+    isolated = isolated.filter((p) => isValidPackageName(p));
 
     const updatedIsolatedList = isolated.filter((app) =>
       installedPackages.has(app),
     );
     if (isolated.length !== updatedIsolatedList.length) {
-      await run(
-        `echo '${JSON.stringify(updatedIsolatedList)}' > ${configPath}`,
-      );
+      await saveIsolateListValue(updatedIsolatedList);
       isolated = updatedIsolatedList;
     }
 
@@ -450,6 +639,13 @@ async function loadApps() {
   }
 }
 
+// helper used only during the initial prune-uninstalled-apps step in loadApps
+async function saveIsolateListValue(list) {
+  return serialize(async () => {
+    await run(`echo ${shQuote(JSON.stringify(list))} > ${shQuote(configPath)}`);
+  });
+}
+
 async function createProfile() {
   const nameInput = document.getElementById("new-profile-name");
   const name = nameInput?.value.trim();
@@ -458,6 +654,14 @@ async function createProfile() {
     const errorMsg = getTranslation
       ? getTranslation("enter_profile_name")
       : "⚠️ Enter a name for the new profile";
+    toast(errorMsg, "error");
+    return;
+  }
+
+  if (!isValidProfileName(name)) {
+    const errorMsg = getTranslation
+      ? getTranslation("invalid_profile_name")
+      : "Invalid profile name";
     toast(errorMsg, "error");
     return;
   }
@@ -511,14 +715,34 @@ function setupSearch() {
   const searchInput = document.getElementById("search");
   if (!searchInput) return;
 
+  // debounce so filtering doesn't thrash the DOM on every keystroke
+  // for users with hundreds of installed apps
+  let debounceHandle;
   searchInput.addEventListener("input", (e) => {
+    clearTimeout(debounceHandle);
     const query = e.target.value.toLowerCase();
-    [...appsList.children].forEach((node) => {
-      const appName = node.querySelector("p")?.textContent?.toLowerCase();
-      const matches = !query || (appName && appName.includes(query));
-      node.style.display = matches ? "" : "none";
-    });
+    debounceHandle = setTimeout(() => {
+      [...appsList.children].forEach((node) => {
+        const appName = node.querySelector("p")?.textContent?.toLowerCase();
+        const matches = !query || (appName && appName.includes(query));
+        node.style.display = matches ? "" : "none";
+      });
+    }, 120);
   });
+}
+
+/**
+ * Validate a user-supplied filesystem path before it's ever interpolated
+ * into a shell command. Rejects empty input, null bytes, and paths that
+ * attempt to traverse outside of typical accessible storage — this is a
+ * defense-in-depth sanity check, not a full path canonicalization; the
+ * primary protection is shQuote() around every use of `path`.
+ */
+function isPlausiblePath(path) {
+  if (!path || typeof path !== "string") return false;
+  if (path.includes("\0")) return false;
+  if (path.length > 4096) return false;
+  return true;
 }
 
 function setupImportExport() {
@@ -557,7 +781,7 @@ function setupImportExport() {
     const pathInput = document.getElementById("io-path-input");
     const path = pathInput?.value?.trim();
 
-    if (!path) {
+    if (!isPlausiblePath(path)) {
       const errorMsg = getTranslation
         ? getTranslation("invalid_path")
         : "Invalid path";
@@ -565,9 +789,14 @@ function setupImportExport() {
       return;
     }
 
+    ioActionBtn.disabled = true;
     try {
       if (mode === "export") {
-        const exportResult = await exec(`cp ${profilesPath} '${path}'`);
+        // shQuote both sides: profilesPath is a constant but quoting it
+        // too costs nothing and keeps the pattern consistent everywhere
+        const exportResult = await exec(
+          `cp ${shQuote(profilesPath)} ${shQuote(path)}`,
+        );
         if (exportResult.errno !== 0) {
           const errorMsg = getTranslation
             ? getTranslation("export_failed")
@@ -575,18 +804,43 @@ function setupImportExport() {
           toast(`${errorMsg}: ${exportResult.stderr}`, "error");
           return;
         }
-        
-        await run(`chmod 644 '${path}' || true`);
+
+        await run(`chmod 644 ${shQuote(path)} || true`);
         const successMsg = getTranslation
           ? getTranslation("export_success")
           : "Profiles exported successfully";
         toast(successMsg, "success");
       } else {
+        // validate the source file actually looks like JSON before
+        // committing it as profiles.json
+        const preview = await run(`cat ${shQuote(path)} 2>/dev/null`);
+        if (!preview) {
+          const errorMsg = getTranslation
+            ? getTranslation("import_failed")
+            : "Import failed";
+          toast(`${errorMsg}: file not found or unreadable`, "error");
+          return;
+        }
+        try {
+          const parsed = JSON.parse(preview);
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+            throw new Error("not a profiles object");
+          }
+        } catch (e) {
+          const errorMsg = getTranslation
+            ? getTranslation("import_failed")
+            : "Import failed";
+          toast(`${errorMsg}: file is not a valid profiles export`, "error");
+          return;
+        }
+
         await run(
-          `if [ -f ${profilesPath} ]; then cp ${profilesPath} /data/adb/.config/net-switch/old_profiles.json; fi`,
+          `if [ -f ${shQuote(profilesPath)} ]; then cp ${shQuote(profilesPath)} ${shQuote(oldProfilesBackupPath)}; fi`,
         );
-        
-        const importResult = await exec(`cp '${path}' ${profilesPath}`);
+
+        const importResult = await exec(
+          `cp ${shQuote(path)} ${shQuote(profilesPath)}`,
+        );
         if (importResult.errno !== 0) {
           const errorMsg = getTranslation
             ? getTranslation("import_failed")
@@ -594,8 +848,8 @@ function setupImportExport() {
           toast(`${errorMsg}: ${importResult.stderr}`, "error");
           return;
         }
-        
-        await run(`chmod 644 ${profilesPath} || true`);
+
+        await run(`chmod 600 ${shQuote(profilesPath)} || true`);
         await loadProfiles();
         updateProfileSelect();
         const successMsg = getTranslation
@@ -611,6 +865,8 @@ function setupImportExport() {
           ? "Export failed"
           : "Import failed";
       toast(`${errorMsg}: ${error.message}`, "error");
+    } finally {
+      ioActionBtn.disabled = false;
     }
   });
 }

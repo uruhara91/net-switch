@@ -1,60 +1,95 @@
-#!/bin/sh
+#!/system/bin/sh
+# Net Switch CLI
+# Hardened: exact UID match, idempotent iptables rules, dedicated chain,
+# input validation, atomic JSON writes
 
 JSON_FILE="/data/adb/.config/net-switch/isolated.json"
+PKGLIST="/data/system/packages.list"
+CHAIN="netswitch"
+
+HAS_IP6=1
+command -v ip6tables >/dev/null 2>&1 || HAS_IP6=0
 
 cli_usage() {
 	echo "Usage: netswitch {block|unblock|list} [package-name...]"
 	echo "Commands:"
-	echo "  block <package-name> [package-name...]    Block internet access for specified packages"
-	echo "  unblock <package-name|all> [package-name...]  Unblock internet access for specified packages"
-	echo "  list                                   Show currently blocked packages"
+	echo "  block <package-name> [package-name...]        Block internet access for specified packages"
+	echo "  unblock <package-name|all> [package-name...]   Unblock internet access for specified packages"
+	echo "  list                                            Show currently blocked packages"
+}
+
+# --- validate a package name looks sane before it ever touches iptables/json
+is_valid_pkg() {
+	case "$1" in
+	"") return 1 ;;
+	*[!a-zA-Z0-9._]*) return 1 ;;
+	*) return 0 ;;
+	esac
+}
+
+ensure_chain() {
+	iptables -N "$CHAIN" 2>/dev/null
+	iptables -C OUTPUT -j "$CHAIN" 2>/dev/null || iptables -I OUTPUT -j "$CHAIN"
+	if [ "$HAS_IP6" = "1" ]; then
+		ip6tables -N "$CHAIN" 2>/dev/null
+		ip6tables -C OUTPUT -j "$CHAIN" 2>/dev/null || ip6tables -I OUTPUT -j "$CHAIN"
+	fi
 }
 
 get_uid() {
 	package="$1"
-	uid="$(grep "^$package" /data/system/packages.list | awk '{print $2; exit}')"
-	[ ! -n "$uid" ] && return 1
+	uid="$(awk -v pkg="$package" '$1 == pkg { print $2; exit }' "$PKGLIST" 2>/dev/null)"
+	[ -z "$uid" ] && return 1
 	echo "$uid"
 	return 0
 }
 
 read_json() {
 	if [ -f "$JSON_FILE" ]; then
-		cat "$JSON_FILE" | tr -d '[]" ' | tr ',' ' '
+		tr -d '[]" ' <"$JSON_FILE" | tr ',' ' '
 	fi
 }
 
+# atomic write: build in tmp file then mv, avoids truncated/corrupt json
+# if the process is killed mid-write
 write_json() {
+	tmp="${JSON_FILE}.tmp.$$"
+	mkdir -p "$(dirname "$JSON_FILE")"
+
 	if [ $# -eq 0 ]; then
-		echo "[]" >"$JSON_FILE"
-		return 0
+		echo "[]" >"$tmp"
+	else
+		(
+			printf "["
+			first=1
+			for pkg in "$@"; do
+				if [ "$first" -eq 1 ]; then
+					printf "\"%s\"" "$pkg"
+					first=0
+				else
+					printf ",\"%s\"" "$pkg"
+				fi
+			done
+			printf "]"
+		) >"$tmp"
 	fi
 
-	(
-		printf "["
-		first=1
-		for pkg in "$@"; do
-			if [ $first -eq 1 ]; then
-				printf "\"%s\"" "$pkg"
-				first=0
-			else
-				printf ",\"%s\"" "$pkg"
-			fi
-		done
-		printf "]"
-	) >"$JSON_FILE"
+	mv -f "$tmp" "$JSON_FILE"
 }
 
 block_package() {
 	package="$1"
+
+	if ! is_valid_pkg "$package"; then
+		echo "Error: '$package' is not a valid package name"
+		return 1
+	fi
+
 	uid="$(get_uid "$package")"
 	if [ $? -ne 0 ] || [ -z "$uid" ]; then
 		echo "Error: Package '$package' not found"
 		return 1
 	fi
-
-	iptables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
-	ip6tables -I OUTPUT -m owner --uid-owner "$uid" -j REJECT
 
 	current_packages="$(read_json)"
 	for app in $current_packages; do
@@ -64,35 +99,66 @@ block_package() {
 		fi
 	done
 
-	write_json $current_packages $package
+	ensure_chain
+	iptables -C "$CHAIN" -m owner --uid-owner "$uid" -j REJECT 2>/dev/null ||
+		iptables -A "$CHAIN" -m owner --uid-owner "$uid" -j REJECT
+	if [ "$HAS_IP6" = "1" ]; then
+		ip6tables -C "$CHAIN" -m owner --uid-owner "$uid" -j REJECT 2>/dev/null ||
+			ip6tables -A "$CHAIN" -m owner --uid-owner "$uid" -j REJECT
+	fi
+
+	write_json $current_packages "$package"
 	echo "Blocked internet access for $package (UID: $uid)"
 }
 
 unblock_package() {
 	package="$1"
-	uid="$(get_uid "$package")"
-	if [ $? -ne 0 ] || [ -z "$uid" ]; then
-		echo "Error: Package '$package' not found"
+
+	if ! is_valid_pkg "$package"; then
+		echo "Error: '$package' is not a valid package name"
 		return 1
 	fi
 
-	iptables -D OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
-	ip6tables -D OUTPUT -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+	uid="$(get_uid "$package")"
+	# even if uid lookup fails (app uninstalled), still remove it from json below
+
+	if [ -n "$uid" ]; then
+		iptables -D "$CHAIN" -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+		[ "$HAS_IP6" = "1" ] && ip6tables -D "$CHAIN" -m owner --uid-owner "$uid" -j REJECT 2>/dev/null
+	fi
 
 	current_packages="$(read_json)"
 	new_packages=""
+	found=0
 	for app in $current_packages; do
-		[ "$app" != "$package" ] && new_packages="$new_packages $app"
+		if [ "$app" = "$package" ]; then
+			found=1
+		else
+			new_packages="$new_packages $app"
+		fi
 	done
 
+	if [ "$found" -eq 0 ]; then
+		echo "Package $package was not blocked"
+		return 0
+	fi
+
 	write_json $new_packages
-	echo "Unblocked internet access for $package (UID: $uid)"
+	if [ -n "$uid" ]; then
+		echo "Unblocked internet access for $package (UID: $uid)"
+	else
+		echo "Unblocked internet access for $package (package no longer installed)"
+	fi
 }
 
 unblock_all() {
 	for package in $(read_json); do
 		unblock_package "$package"
 	done
+	# belt-and-suspenders: flush the whole chain and reset json in case
+	# any uid lookups failed above and left stray rules
+	iptables -F "$CHAIN" 2>/dev/null
+	[ "$HAS_IP6" = "1" ] && ip6tables -F "$CHAIN" 2>/dev/null
 	write_json
 	echo "Unblocked all packages"
 }
@@ -117,7 +183,7 @@ list_blocked() {
 
 handle_block() {
 	if [ $# -eq 0 ]; then
-		echo -e "Error: Bad arguments\nTry 'netswitch help' for more information."
+		printf "Error: Bad arguments\nTry 'netswitch help' for more information.\n"
 		exit 1
 	fi
 
@@ -128,7 +194,7 @@ handle_block() {
 
 handle_unblock() {
 	if [ $# -eq 0 ]; then
-		echo -e "Error: Bad arguments\nTry 'netswitch help' for more information."
+		printf "Error: Bad arguments\nTry 'netswitch help' for more information.\n"
 		exit 1
 	fi
 
@@ -143,9 +209,18 @@ handle_unblock() {
 }
 
 case "$1" in
-"block") shift && handle_block $@ ;;
-"unblock") shift && handle_unblock $@ ;;
+"block")
+	shift
+	handle_block "$@"
+	;;
+"unblock")
+	shift
+	handle_unblock "$@"
+	;;
 "list") list_blocked ;;
 "help") cli_usage ;;
-*) cli_usage && exit 1 ;;
+*)
+	cli_usage
+	exit 1
+	;;
 esac
