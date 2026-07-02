@@ -181,14 +181,13 @@ async function initI18n() {
     // Merge languages with English as default
     const allLanguages = { en: "English", ...languages };
 
-    // Populate language selection modal
+    // Populate language selection modal (M3 list-item styling, matches .modal .btn in index.css)
     languageSelection.innerHTML = "";
     for (const [code, name] of Object.entries(allLanguages)) {
       const button = document.createElement("button");
       button.textContent = name;
       button.dataset.lang = code;
-      button.className =
-        "btn btn-block bg-primary hover:bg-primary text-on-primary py-1 w-full rounded-md text-left";
+      button.className = "btn btn-block w-full rounded-xl py-1 text-left";
       button.setAttribute("role", "button");
       button.setAttribute("aria-pressed", "false");
       languageSelection.appendChild(button);
@@ -221,6 +220,16 @@ async function initI18n() {
     currentTranslations = await loadTranslations(lang);
     applyTranslations(currentTranslations);
 
+    // mark the active language button
+    const markActive = (activeCode) => {
+      languageSelection.querySelectorAll("button").forEach((b) => {
+        const isActive = b.dataset.lang === activeCode;
+        b.classList.toggle("bg-primary", isActive);
+        b.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    };
+    markActive(lang);
+
     // Handle settings button click
     languageBtn.addEventListener("click", () => {
       document.documentElement.classList.add("modal-open");
@@ -234,9 +243,7 @@ async function initI18n() {
       const newLang = btn.dataset.lang;
       if (!newLang) return;
 
-      languageSelection.querySelectorAll("button").forEach((b) => {
-        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
-      });
+      markActive(newLang);
 
       const oldTranslations = currentTranslations;
       try {

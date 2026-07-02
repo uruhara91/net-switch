@@ -2,303 +2,349 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   Material 3 foundation
+   All color comes from the CSS custom properties injected by the host
+   (MMRL / KernelSU WebUI), already wired through tailwind.config.js as
+   bg-surface, text-on-surface, etc. This file only adds the M3 mechanics
+   that Tailwind's utility classes don't express on their own:
+   tonal elevation, standard motion, and state layers.
+   ========================================================================== */
+
+:root {
+  /* M3 standard easing + duration tokens (Material motion spec) */
+  --m3-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --m3-easing-emphasized: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --m3-duration-short: 150ms;
+  --m3-duration-medium: 250ms;
+  --m3-duration-long: 400ms;
+}
+
+html {
+  /* Prevent the iOS/Android WebView rubber-band flash from showing the
+     browser default background instead of the surface token */
+  background: var(--surfaceDim, #1A1111);
+}
+
+body {
+  background: var(--background, #1A1111);
+  transition: background-color var(--m3-duration-medium) var(--m3-easing-standard);
+}
+
 input[type="search"]::-webkit-search-cancel-button {
-    -webkit-appearance: none;
-    height: 16px;
-    width: 16px;
-    background: white;
-    border-radius: 50%;
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  background: var(--onSurfaceVariant, currentColor);
+  border-radius: 50%;
+  opacity: 0.6;
 }
 
 .root_layout {
-    padding-top: var(--window-inset-top);
-    padding-bottom: var(--window-inset-bottom);
+  padding-top: var(--window-inset-top);
+  padding-bottom: var(--window-inset-bottom);
 }
 
-/* Enhanced animations */
-@keyframes slideInFromRight {
-    0% {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    100% {
-        transform: translateX(0);
-        opacity: 1;
-    }
+/* ==========================================================================
+   Tonal elevation
+   M3 expresses elevation as a lighter surface tone layered over the base
+   surface, not a drop shadow. Each level corresponds to the matching
+   --surfaceContainer* token already provided by the host.
+   ========================================================================== */
+
+.m3-surface-0 { background-color: var(--surface, #1A1111); }
+.m3-surface-1 { background-color: var(--surfaceContainerLow, #231919); }
+.m3-surface-2 { background-color: var(--surfaceContainer, #271D1D); }
+.m3-surface-3 { background-color: var(--surfaceContainerHigh, #322827); }
+.m3-surface-4,
+.m3-surface-5 { background-color: var(--surfaceContainerHighest, #3D3231); }
+
+/* ==========================================================================
+   State layers
+   M3 interactive elements overlay a flat tint of the foreground color at a
+   fixed opacity on hover/press, rather than swapping to an unrelated
+   hardcoded color. Applied via ::after so it never fights the element's
+   own background-color transition.
+   ========================================================================== */
+
+.m3-state-layer {
+  position: relative;
+  isolation: isolate;
 }
 
-@keyframes fadeInUp {
-    0% {
-        transform: translateY(20px);
-        opacity: 0;
-    }
-    100% {
-        transform: translateY(0);
-        opacity: 1;
-    }
+.m3-state-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: currentColor;
+  opacity: 0;
+  border-radius: inherit;
+  transition: opacity var(--m3-duration-short) var(--m3-easing-standard);
+  pointer-events: none;
 }
 
-@keyframes pulse {
-    0%,
-    100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
+.m3-state-layer:hover::after { opacity: 0.08; }
+.m3-state-layer:active::after { opacity: 0.12; }
+.m3-state-layer:focus-visible::after { opacity: 0.12; }
+
+@media (prefers-reduced-motion: reduce) {
+  .m3-state-layer::after {
+    transition: none;
+  }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
-}
+/* ==========================================================================
+   Buttons / interactive base
+   ========================================================================== */
 
-::-webkit-scrollbar-track {
-    background: #f1f5f9;
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: linear-gradient(to bottom, #3b82f6, #6366f1);
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(to bottom, #2563eb, #4f46e5);
-}
-
-/* Dark mode scrollbar */
-.dark ::-webkit-scrollbar-track {
-    background: #374151;
-}
-
-/* Enhanced button hover effects */
 button {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-button:hover {
-    transform: translateY(-1px);
+  transition:
+    background-color var(--m3-duration-short) var(--m3-easing-standard),
+    box-shadow var(--m3-duration-short) var(--m3-easing-standard),
+    transform var(--m3-duration-short) var(--m3-easing-standard);
 }
 
 button:active {
-    transform: translateY(0);
+  transform: scale(0.98);
 }
 
-/* Gradient text animations */
-.gradient-text {
-    background: linear-gradient(-45deg, #3b82f6, #8b5cf6, #ec4899, #f59e0b);
-    background-size: 400% 400%;
-    animation: gradientShift 3s ease infinite;
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+  button:active {
+    transform: none;
+  }
 }
 
-@keyframes gradientShift {
-    0% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0% 50%;
-    }
+/* visible keyboard focus ring, M3-style (offset ring using primary token) */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary, #FFB3AE);
+  outline-offset: 2px;
 }
 
-/* Enhanced card animations */
-.card-hover {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* ==========================================================================
+   Scrollbar — themed to surface/outline tokens instead of hardcoded blues
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
 }
 
-.card-hover:hover {
-    transform: translateY(-4px) scale(1.02);
-    box-shadow:
-        0 20px 25px -5px rgba(0, 0, 0, 0.1),
-        0 10px 10px -5px rgba(0, 0, 0, 0.04);
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-/* Loading spinner styles */
-.spinner {
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #3b82f6;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
+::-webkit-scrollbar-thumb {
+  background: var(--outlineVariant, #534342);
+  border-radius: 10px;
 }
 
-@keyframes spin {
-    0% {
-        transform: rotate(0deg);
-    }
-    100% {
-        transform: rotate(360deg);
-    }
+::-webkit-scrollbar-thumb:hover {
+  background: var(--outline, #A08C8A);
 }
 
-/* Enhanced switch styles */
+/* ==========================================================================
+   M3 Switch (replaces the old red/gradient toggle with a spec-accurate
+   M3 switch: track = surface-variant/primary, thumb grows on check)
+   ========================================================================== */
+
 .switch-enhanced {
-    position: relative;
-    display: inline-block;
-    width: 60px;
-    height: 34px;
+  position: relative;
+  display: inline-block;
+  width: 52px;
+  height: 32px;
+  flex-shrink: 0;
 }
 
 .switch-enhanced input {
-    opacity: 0;
-    width: 0;
-    height: 0;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
 }
 
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(45deg, #e2e8f0, #cbd5e1);
-    transition: 0.4s;
-    border-radius: 34px;
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+.switch-enhanced .slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--surfaceContainerHighest, #3D3231);
+  border: 2px solid var(--outline, #A08C8A);
+  transition:
+    background-color var(--m3-duration-medium) var(--m3-easing-standard),
+    border-color var(--m3-duration-medium) var(--m3-easing-standard);
+  border-radius: 999px;
 }
 
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 26px;
-    width: 26px;
-    left: 4px;
-    bottom: 4px;
-    background: linear-gradient(45deg, #ffffff, #f8fafc);
-    transition: 0.4s;
-    border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+.switch-enhanced .slider::before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 7px;
+  top: 7px;
+  background-color: var(--outline, #A08C8A);
+  transition:
+    transform var(--m3-duration-medium) var(--m3-easing-standard),
+    height var(--m3-duration-short) var(--m3-easing-standard),
+    width var(--m3-duration-short) var(--m3-easing-standard),
+    left var(--m3-duration-short) var(--m3-easing-standard),
+    top var(--m3-duration-short) var(--m3-easing-standard),
+    background-color var(--m3-duration-medium) var(--m3-easing-standard);
+  border-radius: 50%;
 }
 
-input:checked + .slider {
-    background: linear-gradient(45deg, #ef4444, #dc2626);
+/* checked = "isolated" state, tinted with error tokens since this app's
+   "on" state means the app is blocked -- red/error is the correct
+   semantic here, not an arbitrary color choice */
+.switch-enhanced input:checked + .slider {
+  background-color: var(--error, #FFB4AB);
+  border-color: var(--error, #FFB4AB);
 }
 
-input:checked + .slider:before {
-    transform: translateX(26px);
+.switch-enhanced input:checked + .slider::before {
+  transform: translateX(20px);
+  height: 24px;
+  width: 24px;
+  left: 2px;
+  top: 2px;
+  background-color: var(--onError, #690005);
 }
 
-/* Toast styles - hide completely when not active */
+.switch-enhanced:active .slider::before {
+  width: 28px;
+}
+
+.switch-enhanced input:checked:active + .slider::before {
+  width: 28px;
+}
+
+/* ==========================================================================
+   Toast — M3 snackbar shape/elevation
+   ========================================================================== */
+
 .toast-hidden {
-    transform: translateX(calc(100% + 20px)) !important;
-    opacity: 0 !important;
-    visibility: hidden !important;
+  transform: translateY(calc(100% + 20px)) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
-/* Modal styles */
+#success-toast,
+#error-toast {
+  transition:
+    transform var(--m3-duration-medium) var(--m3-easing-emphasized),
+    opacity var(--m3-duration-medium) var(--m3-easing-standard);
+}
+
+/* ==========================================================================
+   Modal (language picker, etc.) — M3 dialog: surface-container-high,
+   28px corner radius, scrim via ::backdrop
+   ========================================================================== */
+
 .modal {
-    position: fixed;
-    z-index: 1000;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    max-width: 400px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    box-shadow:
-        0 20px 25px -5px rgba(0, 0, 0, 0.1),
-        0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  position: fixed;
+  z-index: 1000;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  max-width: 400px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border: none;
+  border-radius: 28px;
+  background-color: var(--surfaceContainerHigh, #322827);
+  color: var(--onSurface, #F1DEDD);
+  opacity: 0;
+  transition:
+    transform var(--m3-duration-medium) var(--m3-easing-emphasized),
+    opacity var(--m3-duration-short) var(--m3-easing-standard),
+    overlay var(--m3-duration-medium) var(--m3-easing-emphasized) allow-discrete,
+    display var(--m3-duration-medium) var(--m3-easing-emphasized) allow-discrete;
 }
 
 .modal:not([open]) {
-    display: none;
+  display: none;
+}
+
+.modal[open] {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+
+@starting-style {
+  .modal[open] {
+    transform: translate(-50%, -50%) scale(0.95);
+    opacity: 0;
+  }
 }
 
 .modal::backdrop {
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+  background: var(--scrim, #000000);
+  opacity: 0.32;
 }
 
-.dark .modal {
-    border-color: #374151;
-}
-
-/* Language selection button styles */
 .modal .btn {
-    width: 100%;
-    padding: 12px 16px;
-    margin-bottom: 8px;
-    border: none;
-    border-radius: 8px;
-    background: #f3f4f6;
-    color: #374151;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-align: left;
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--onSurface, #F1DEDD);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--m3-duration-short) var(--m3-easing-standard);
+  text-align: left;
 }
 
 .modal .btn:hover {
-    background: #e5e7eb;
-    transform: translateY(-1px);
+  background: var(--surfaceContainerHighest, #3D3231);
 }
 
 .modal .btn:active {
-    transform: translateY(0);
+  background: var(--surfaceContainerHighest, #3D3231);
 }
 
-.dark .modal .btn {
-    background: #374151;
-    color: #f3f4f6;
-}
-
-.dark .modal .btn:hover {
-    background: #4b5563;
-}
-
-/* Language button with primary colors */
 .modal .btn.bg-primary {
-    background: linear-gradient(135deg, #3b82f6, #6366f1);
-    color: white;
+  background: var(--primaryContainer, #733330);
+  color: var(--onPrimaryContainer, #FFDAD7);
+  font-weight: 600;
 }
 
 .modal .btn.bg-primary:hover {
-    background: linear-gradient(135deg, #2563eb, #4f46e5);
+  background: var(--primaryContainer, #733330);
+  filter: brightness(1.1);
 }
 
-/* Modal animation */
-.modal[open] {
-    animation: modalFadeIn 0.3s ease-out;
-}
-
-@keyframes modalFadeIn {
-    from {
-        opacity: 0;
-        transform: translate(-50%, -50%) scale(0.95);
-    }
-    to {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-    }
-}
-
-/* Enhanced language button styles */
 #language_btn {
-    transition: all 0.2s ease;
+  transition: background-color var(--m3-duration-short) var(--m3-easing-standard);
 }
 
-#language_btn:hover {
-    background-color: rgba(0, 0, 0, 0.1);
-    transform: scale(1.05);
-}
-
-.dark #language_btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-/* Responsive modal */
 @media (max-width: 640px) {
-    .modal {
-        width: 95%;
-        max-height: 85vh;
-    }
+  .modal {
+    width: 95%;
+    max-height: 85vh;
+  }
+}
+
+/* ==========================================================================
+   Reduced motion: collapse everything to instant, per accessibility
+   ground rules — checked as a whole-file safety net in addition to the
+   per-component overrides above.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
